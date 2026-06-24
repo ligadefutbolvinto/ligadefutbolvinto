@@ -205,7 +205,7 @@ ${g}`}class ne extends Error{constructor({message:e,code:r,cause:n,name:s}){var 
                         id,
                         año,
                         categoria_jugador,
-                        equipos (
+                        equipos:equipos!historial_participacion_equipo_id_fkey (
                             id,
                             nombre
                         )
