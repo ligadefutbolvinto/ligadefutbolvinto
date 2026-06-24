@@ -50,7 +50,3 @@ body {
 .no-suggestions {
   @apply px-5 py-8 text-center text-gray-400 text-sm font-semibold italic bg-gray-50/50;
 }
-
-.hidden {
-  display: none !important;
-}

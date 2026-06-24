@@ -158,7 +158,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
                     <div className="flex items-center cursor-pointer" onClick={() => setActiveTab('inicio')}>
                         <div className="bg-white rounded-full p-1 shadow-lg border-2 border-green-400 hover:scale-105 transition-transform duration-300">
                             <img
-                                src="/logo-liga.png"
+                                src="/logo.png"
                                 alt="Liga Vinto"
                                 className="h-20 w-20 rounded-full object-cover"
                             />
