@@ -809,11 +809,11 @@ const LoginPanel = ({ onLoginSuccess }) => {
 
 const PanelEquipo = ({ delegateInfo, onLogout }) => {
     const [searchTerm, setSearchTerm] = useState('');
-    const [searchResults, setSearchResults] = useState([]);
+    const [playersCache, setPlayersCache] = useState([]);
+    const [loadingCache, setLoadingCache] = useState(false);
+    const [showSuggestions, setShowSuggestions] = useState(false);
+    const [searchMode, setSearchMode] = useState('predictive'); // 'predictive' | 'full'
     const [player, setPlayer] = useState(null);
-    const [searchError, setSearchError] = useState('');
-    const [loadingSearch, setLoadingSearch] = useState(false);
-    const [hasSearched, setHasSearched] = useState(false);
     const [activeSubTab, setActiveSubTab] = useState('nomina');
     
     // Roster (Nomina) States
@@ -837,12 +837,65 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
     const [editError, setEditError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
 
-    // Load Nomina on mount or team change
+    // Load Nomina and Players Cache on mount or team change
     useEffect(() => {
         if (delegateInfo && delegateInfo.equipo_id) {
             fetchNomina();
+            fetchPlayersCache();
         }
     }, [delegateInfo]);
+
+    // Handle click outside to close suggestions
+    useEffect(() => {
+        const handleClickOutside = (e) => {
+            const searchInput = document.getElementById('search-player');
+            const suggestions = document.getElementById('search-suggestions');
+            const triggerBtn = document.getElementById('btn-search-trigger');
+            const clearBtn = document.getElementById('btn-clear-search');
+            
+            if (
+                searchInput && !searchInput.contains(e.target) &&
+                suggestions && !suggestions.contains(e.target) &&
+                triggerBtn && !triggerBtn.contains(e.target) &&
+                clearBtn && !clearBtn.contains(e.target)
+            ) {
+                setShowSuggestions(false);
+            }
+        };
+        document.addEventListener('click', handleClickOutside);
+        return () => document.removeEventListener('click', handleClickOutside);
+    }, []);
+
+    const fetchPlayersCache = async () => {
+        setLoadingCache(true);
+        try {
+            const { data, error } = await supabase
+                .from('jugadores')
+                .select(`
+                    ci,
+                    nombres,
+                    apellidos,
+                    fecha_nacimiento,
+                    foto_url,
+                    historial_participacion (
+                        id,
+                        año,
+                        categoria_jugador,
+                        equipos:equipos!historial_participacion_equipo_id_fkey (
+                            id,
+                            nombre
+                        )
+                    )
+                `);
+
+            if (error) throw error;
+            setPlayersCache(data || []);
+        } catch (err) {
+            console.error("Error loading players cache:", err);
+        } finally {
+            setLoadingCache(false);
+        }
+    };
 
     const fetchNomina = async () => {
         setLoadingNomina(true);
@@ -886,55 +939,60 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
         }
     };
 
-    // Scouting Global Search
-    const handleSearch = async (e) => {
-        e.preventDefault();
-        const term = searchTerm.trim();
-        if (!term) return;
+    // Local Predictive Search Utilities
+    const normalizeString = (str) => {
+        if (!str) return '';
+        return str.toLowerCase()
+            .normalize("NFD")
+            .replace(/[\u0300-\u036f]/g, "");
+    };
 
-        setLoadingSearch(true);
-        setHasSearched(true);
-        setPlayer(null);
-        setSearchError('');
-        setSearchResults([]);
-
-        try {
-            const { data, error } = await supabase
-                .from('jugadores')
-                .select(`
-                    ci,
-                    nombres,
-                    apellidos,
-                    fecha_nacimiento,
-                    foto_url,
-                    historial_participacion (
-                        id,
-                        año,
-                        categoria_jugador,
-                        equipos:equipos!historial_participacion_equipo_id_fkey (
-                            id,
-                            nombre
-                        )
-                    )
-                `)
-                .or(`ci.ilike.%${term}%,nombres.ilike.%${term}%,apellidos.ilike.%${term}%`);
-
-            if (error) throw error;
-
-            if (data && data.length > 0) {
-                setSearchResults(data);
-                if (data.length === 1) {
-                    setPlayer(data[0]);
-                }
-            } else {
-                setSearchError('No se encontró ningún jugador con ese C.I. o nombre.');
-            }
-        } catch (err) {
-            console.error("Search error:", err);
-            setSearchError('Ocurrió un error al realizar la búsqueda.');
-        } finally {
-            setLoadingSearch(false);
+    const handleSearchInput = (e) => {
+        const value = e.target.value;
+        setSearchTerm(value);
+        setSearchMode('predictive');
+        
+        if (value.trim().length >= 2) {
+            setShowSuggestions(true);
+        } else {
+            setShowSuggestions(false);
         }
+    };
+
+    const getMatches = () => {
+        const query = normalizeString(searchTerm.trim());
+        if (query.length < 2) return [];
+        
+        return playersCache.filter(player => {
+            const nameMatch = normalizeString(player.nombres).includes(query);
+            const surnameMatch = normalizeString(player.apellidos).includes(query);
+            const ciMatch = player.ci ? player.ci.toLowerCase().includes(query) : false;
+            return nameMatch || surnameMatch || ciMatch;
+        });
+    };
+
+    const performFullSearch = (e) => {
+        if (e) e.preventDefault();
+        const query = normalizeString(searchTerm.trim());
+        if (query.length < 2) return;
+        
+        setSearchMode('full');
+        setShowSuggestions(true);
+    };
+
+    const selectPlayer = (p) => {
+        setPlayer(p);
+        setSearchTerm(`${p.nombres} ${p.apellidos}`);
+        setShowSuggestions(false);
+    };
+
+    const handleClearSearch = () => {
+        setSearchTerm('');
+        setShowSuggestions(false);
+        setPlayer(null);
+        setSearchMode('predictive');
+        const inputEl = document.getElementById('search-player');
+        if (inputEl) inputEl.focus();
     };
 
     // Edit Modal opening
@@ -1021,8 +1079,9 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
 
             setSuccessMessage('Datos del jugador actualizados correctamente.');
             
-            // Reload roster
+            // Reload roster and search cache
             await fetchNomina();
+            await fetchPlayersCache();
 
             // Auto close modal after 1.5 seconds
             setTimeout(() => {
@@ -1079,9 +1138,8 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                     </button>
                 </div>
             </div>
-
-            {/* Buscador de Jugadores (Subsección Superior) */}
-            <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100">
+                    {/* Buscador de Jugadores (Subsección Superior) */}
+            <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 relative z-30">
                 <h4 className="text-xl font-bold text-gray-900 mb-2 flex items-center">
                     <Search className="w-5 h-5 mr-2 text-green-600" />
                     Buscador Global (Scouting)
@@ -1089,101 +1147,120 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                 <p className="text-gray-500 text-sm mb-6">
                     Consulta el registro nacional de pases y habilitación de jugadores de cualquier equipo ingresando su C.I. o nombre.
                 </p>
-                <form onSubmit={handleSearch} className="flex flex-col md:flex-row gap-4 mb-6">
-                    <input
-                        type="text"
-                        placeholder="Ingrese Carnet de Identidad o Nombre (ej: 1111 o Juan Perez)"
-                        className="flex-1 p-4 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent outline-none text-lg"
-                        value={searchTerm}
-                        onChange={(e) => setSearchTerm(e.target.value)}
-                        disabled={loadingSearch}
-                    />
+                
+                <div className="search-input-wrapper">
+                    <div className="search-input-inner">
+                        {/* Input principal */}
+                        <input
+                            type="text"
+                            id="search-player"
+                            placeholder="Escribe para buscar..."
+                            autoComplete="off"
+                            value={searchTerm}
+                            onChange={handleSearchInput}
+                            onFocus={() => {
+                                if (searchTerm.trim().length >= 2) {
+                                    setShowSuggestions(true);
+                                }
+                            }}
+                        />
+                        {/* Icono decorativo o botón de limpiar */}
+                        <button
+                            id="btn-clear-search"
+                            className={`clear-input-btn ${searchTerm.trim() ? '' : 'hidden'}`}
+                            type="button"
+                            onClick={handleClearSearch}
+                        >
+                            ×
+                        </button>
+                    </div>
+                    {/* Botón para forzar búsqueda completa */}
                     <button
-                        type="submit"
-                        disabled={loadingSearch}
-                        className="bg-green-600 text-white px-8 py-4 rounded-lg font-bold hover:bg-green-700 transition-colors flex items-center justify-center shadow-md active:scale-98 disabled:bg-gray-400"
+                        id="btn-search-trigger"
+                        className="btn btn-primary bg-green-700 text-white font-bold px-6 rounded-xl hover:bg-green-800 transition-colors shadow-md active:scale-98"
+                        type="button"
+                        onClick={performFullSearch}
                     >
-                        {loadingSearch ? (
-                            <div className="w-5 h-5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                        ) : (
-                            <Search className="w-5 h-5 mr-2" />
-                        )}
-                        <span>Verificar Registro</span>
+                        Buscar
                     </button>
-                </form>
+                </div>
 
-                {hasSearched && searchError && (
-                    <div className="bg-red-55 border-l-4 border-red-500 p-4 rounded-r-lg animate-fade-in max-w-2xl mx-auto flex gap-2">
-                        <AlertCircle className="w-5 h-5 text-red-500 flex-shrink-0" />
-                        <p className="text-sm text-red-700">{searchError}</p>
-                    </div>
-                )}
-
-                {/* Lista de Resultados Multiples */}
-                {hasSearched && searchResults.length > 1 && !player && (
-                    <div className="max-w-2xl mx-auto space-y-3">
-                        <p className="text-xs text-gray-450 font-bold uppercase tracking-wider mb-2">Coincidencias encontradas ({searchResults.length}):</p>
-                        <div className="grid gap-2">
-                            {searchResults.map((j, idx) => {
-                                const latestPart = j.historial_participacion && j.historial_participacion.length > 0
-                                    ? [...j.historial_participacion].sort((a, b) => b.año - a.año)[0]
-                                    : null;
-                                return (
-                                    <div 
-                                        key={idx}
-                                        onClick={() => setPlayer(j)}
-                                        className="bg-gray-50 border border-gray-200 hover:border-green-400 p-4 rounded-xl flex items-center justify-between cursor-pointer transition-all hover:shadow-sm"
-                                    >
-                                        <div className="flex items-center gap-3">
-                                            <img 
-                                                src={j.foto_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + j.nombres} 
-                                                alt={j.nombres}
-                                                className="w-10 h-10 rounded-full border border-gray-200 bg-white object-cover"
-                                            />
-                                            <div>
-                                                <h5 className="font-bold text-gray-800 text-sm">{j.nombres} {j.apellidos}</h5>
-                                                <p className="text-[11px] text-gray-405">C.I. {j.ci} • Nacimiento: {j.fecha_nacimiento}</p>
+                {/* Contenedor flotante para las sugerencias predictivas */}
+                {showSuggestions && (
+                    <div id="search-suggestions" className="suggestions-container">
+                        {(() => {
+                            const matches = getMatches();
+                            if (matches.length === 0) {
+                                return <div className="no-suggestions">No se encontraron resultados</div>;
+                            }
+                            
+                            const limit = searchMode === 'full' ? 100 : 25;
+                            const topMatches = matches.slice(0, limit);
+                            
+                            return (
+                                <>
+                                    {searchMode === 'full' && (
+                                        <div className="suggestions-header">
+                                            Resultados de búsqueda: {matches.length} encontrados
+                                        </div>
+                                    )}
+                                    {topMatches.map((pCache) => (
+                                        <div
+                                            key={pCache.ci}
+                                            className="suggestion-item"
+                                            onClick={() => selectPlayer(pCache)}
+                                        >
+                                            <div className="suggestion-info flex items-center gap-3">
+                                                <img 
+                                                    src={pCache.foto_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + pCache.nombres} 
+                                                    alt={pCache.nombres}
+                                                    className="w-8 h-8 rounded-full border border-gray-205 object-cover bg-white flex-shrink-0"
+                                                />
+                                                <div>
+                                                    <span className="suggestion-name block">
+                                                        {pCache.nombres} {pCache.apellidos}
+                                                    </span>
+                                                    <span className="text-[10px] text-gray-400 font-semibold">
+                                                        C.I. {pCache.ci}
+                                                    </span>
+                                                </div>
                                             </div>
+                                            <span className="text-[10px] bg-green-100 text-green-800 font-bold px-2 py-0.5 rounded flex-shrink-0">
+                                                {pCache.historial_participacion && pCache.historial_participacion.length > 0
+                                                    ? [...pCache.historial_participacion].sort((a, b) => b.año - a.año)[0]?.equipos?.nombre || 'Sin Club'
+                                                    : 'Sin Club'}
+                                            </span>
                                         </div>
-                                        <div className="flex items-center gap-2">
-                                            {latestPart && (
-                                                <span className="bg-green-100 text-green-800 text-[10px] font-bold px-2 py-0.5 rounded">
-                                                    {latestPart.equipos ? latestPart.equipos.nombre : 'Sin Club'} ({latestPart.año})
-                                                </span>
-                                            )}
-                                            <Eye size={14} className="text-gray-400" />
-                                        </div>
-                                    </div>
-                                );
-                            })}
-                        </div>
+                                    ))}
+                                </>
+                            );
+                        })()}
                     </div>
                 )}
 
+                {/* Selected Player Details Card */}
                 {player && (
-                    <div className="bg-gray-50 border border-gray-200 rounded-xl p-6 animate-slide-up max-w-2xl mx-auto relative">
-                        {searchResults.length > 1 && (
-                            <button 
-                                onClick={() => setPlayer(null)}
-                                className="absolute top-4 right-4 text-xs font-bold text-green-700 hover:text-green-850"
-                            >
-                                &larr; Volver a resultados
-                            </button>
-                        )}
+                    <div className="mt-8 bg-gray-50 border border-gray-205 rounded-2xl p-6 animate-slide-up max-w-2xl mx-auto relative">
+                        <button 
+                            onClick={() => setPlayer(null)}
+                            className="absolute top-4 right-4 text-xs font-bold text-gray-400 hover:text-red-600 transition-colors"
+                        >
+                            &times; Cerrar Ficha
+                        </button>
                         <div className="flex flex-col sm:flex-row items-center gap-6">
                             <img
                                 src={player.foto_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + player.nombres}
                                 alt={player.nombres}
-                                className="w-28 h-28 rounded-full border-4 border-white bg-white shadow-md object-cover"
+                                className="w-28 h-28 rounded-full border-4 border-white bg-white shadow-md object-cover flex-shrink-0"
                             />
                             <div className="text-center sm:text-left flex-1">
                                 <div className="flex items-center justify-center sm:justify-start gap-2 mb-2">
                                     <span className="bg-green-100 text-green-800 text-xs font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider">
-                                        Habilitado
+                                        Registro Oficial Habilitado
                                     </span>
                                 </div>
-                                <h3 className="text-2xl font-extrabold text-gray-900">{player.nombres} {player.apellidos}</h3>
-                                <div className="text-gray-600 font-semibold mt-1 flex flex-col sm:flex-row sm:gap-4 justify-center sm:justify-start text-sm">
+                                <h3 className="text-2xl font-extrabold text-gray-900 leading-tight">{player.nombres} {player.apellidos}</h3>
+                                <div className="text-gray-600 font-semibold mt-2 flex flex-col sm:flex-row sm:gap-4 justify-center sm:justify-start text-sm">
                                     <span>C.I. <strong className="text-gray-900">{player.ci}</strong></span>
                                     <span>Nacimiento: <strong className="text-gray-900">{player.fecha_nacimiento}</strong></span>
                                 </div>
@@ -1200,7 +1277,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                     {[...player.historial_participacion].sort((a, b) => b.año - a.año).map((item, idx) => (
                                         <div key={idx} className="relative">
                                             <div className="absolute -left-[30px] top-1.5 bg-green-800 rounded-full w-4 h-4 border-2 border-white shadow-sm"></div>
-                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-3.5 rounded-xl border border-gray-200 shadow-sm">
+                                            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-white p-3.5 rounded-xl border border-gray-205 shadow-sm">
                                                 <div className="flex items-center gap-2">
                                                     {(() => {
                                                         const teamName = item.equipos ? item.equipos.nombre : 'Sin Club';
@@ -1213,7 +1290,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                                     })()}
                                                     <div>
                                                         <span className="font-bold text-gray-800 text-sm">{item.equipos ? item.equipos.nombre : 'Sin Club'}</span>
-                                                        <span className="text-[10px] text-gray-450 ml-2 uppercase">({item.categoria_jugador})</span>
+                                                        <span className="text-[10px] text-gray-455 ml-2 uppercase">({item.categoria_jugador})</span>
                                                     </div>
                                                 </div>
                                                 <span className="bg-green-700 text-white font-black text-xs px-2.5 py-1 rounded w-max">
@@ -1294,48 +1371,55 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                     <p className="text-gray-400 text-xs">No hay jugadores inscritos en la nómina 2026 de su club.</p>
                                 </div>
                             ) : (
-                                <div className="grid gap-4 sm:grid-cols-1 md:grid-cols-2 max-w-5xl mx-auto">
+                                <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-7xl mx-auto py-4">
                                     {[...nomina].sort((a, b) => a.nombres.localeCompare(b.nombres)).map((j, index) => (
                                         <div
                                             key={index}
-                                            className="bg-white border border-gray-200 rounded-2xl p-4 flex items-center justify-between hover:border-green-300 hover:shadow-md transition-all shadow-sm group animate-slide-up"
+                                            className="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col justify-between hover:border-green-500 hover:shadow-xl transition-all duration-300 shadow-md hover:-translate-y-1 transform group relative overflow-hidden"
                                         >
-                                            <div className="flex items-center gap-4">
+                                            <div className="flex items-start gap-4 mb-4">
                                                 <img 
                                                     src={j.foto_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + j.nombres}
                                                     alt={j.nombres}
-                                                    className="w-14 h-14 rounded-full border border-gray-200 bg-white object-cover flex-shrink-0"
+                                                    className="w-18 h-18 rounded-full border-2 border-green-700 bg-gray-50 object-cover flex-shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-105"
                                                 />
-                                                <div>
-                                                    <h5 className="font-extrabold text-gray-800 text-sm sm:text-base leading-tight">
+                                                <div className="flex-1 min-w-0">
+                                                    <h5 className="font-extrabold text-gray-900 text-base leading-snug truncate">
                                                         {j.nombres} {j.apellidos}
                                                     </h5>
-                                                    <p className="text-[11px] text-gray-450 mt-1 flex flex-wrap gap-x-2">
-                                                        <span>C.I. <strong className="font-semibold text-gray-600">{j.ci}</strong></span>
-                                                        <span>•</span>
-                                                        <span>Nacimiento: <strong className="font-semibold text-gray-600">{j.fecha_nacimiento}</strong></span>
-                                                    </p>
-                                                    <div className="mt-2 flex items-center gap-2">
-                                                        <span className={`px-2 py-0.5 rounded text-[9px] font-black uppercase tracking-wider ${
-                                                            j.categoria_jugador === 'refuerzo'
-                                                                ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                                                : j.categoria_jugador === 'juvenil'
-                                                                ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                                                : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                                        }`}>
-                                                            {j.categoria_jugador}
-                                                        </span>
+                                                    <div className="text-xs text-gray-400 mt-1.5 space-y-0.5">
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="font-semibold text-gray-500">C.I.:</span>
+                                                            <span className="font-bold text-gray-800">{j.ci}</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-1">
+                                                            <span className="font-semibold text-gray-500">Nacimiento:</span>
+                                                            <span className="font-bold text-gray-800">{j.fecha_nacimiento}</span>
+                                                        </div>
                                                     </div>
                                                 </div>
                                             </div>
                                             
-                                            <button
-                                                onClick={() => handleOpenEdit(j)}
-                                                className="bg-gray-55 border border-gray-200 hover:bg-green-50 hover:border-green-450 hover:text-green-750 p-2.5 rounded-xl transition-all shadow-sm flex items-center justify-center text-gray-550 flex-shrink-0"
-                                                title="Editar Datos"
-                                            >
-                                                <Edit2 size={16} />
-                                            </button>
+                                            <div className="flex items-center justify-between mt-2 pt-4 border-t border-gray-100">
+                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                    j.categoria_jugador === 'refuerzo'
+                                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                                        : j.categoria_jugador === 'juvenil'
+                                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                }`}>
+                                                    {j.categoria_jugador}
+                                                </span>
+                                                
+                                                <button
+                                                    onClick={() => handleOpenEdit(j)}
+                                                    className="bg-gray-50 border border-gray-205 hover:bg-green-50 hover:border-green-450 hover:text-green-750 py-2 px-4 rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold text-gray-600"
+                                                    title="Editar Datos"
+                                                >
+                                                    <Edit2 size={13} />
+                                                    <span>Editar</span>
+                                                </button>
+                                            </div>
                                         </div>
                                     ))}
                                 </div>
