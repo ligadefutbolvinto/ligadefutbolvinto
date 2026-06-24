@@ -158,7 +158,7 @@ const Navbar = ({ activeTab, setActiveTab }) => {
                     <div className="flex items-center cursor-pointer" onClick={() => setActiveTab('inicio')}>
                         <div className="bg-white rounded-full p-1 shadow-lg border-2 border-green-400 hover:scale-105 transition-transform duration-300">
                             <img
-                                src="/logo.png"
+                                src="/liga.png"
                                 alt="Liga Vinto"
                                 className="h-20 w-20 rounded-full object-cover"
                             />
@@ -1104,13 +1104,13 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
     };
 
     return (
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in space-y-12 font-sans">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-12 animate-fade-in space-y-6 sm:space-y-12 font-sans">
             
             {/* Header del Panel */}
             <div className="bg-white rounded-2xl shadow-xl border border-gray-100 overflow-hidden animate-slide-up">
                 <div className="bg-gradient-to-r from-green-800 to-green-950 px-6 py-6 text-white flex flex-col sm:flex-row items-center justify-between gap-4">
-                    <div className="flex items-center gap-4">
-                        <div className="bg-white rounded-full p-1 shadow-lg w-16 h-16 flex items-center justify-center overflow-hidden">
+                    <div className="flex flex-col sm:flex-row items-center gap-4 text-center sm:text-left">
+                        <div className="bg-white rounded-full p-1 shadow-lg w-16 h-16 flex items-center justify-center overflow-hidden flex-shrink-0">
                             {(() => {
                                 const logo = getLogo(delegateInfo.nombreEquipo);
                                 return logo ? (
@@ -1125,14 +1125,14 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                             })()}
                         </div>
                         <div>
-                            <h3 className="text-2xl font-bold tracking-tight">Administración: {delegateInfo.nombre_completo}</h3>
-                            <p className="text-green-300 text-sm">Panel de Control del Club: <span className="font-extrabold text-white uppercase">{delegateInfo.nombreEquipo}</span></p>
+                            <h3 className="text-xl sm:text-2xl font-bold tracking-tight">Administración: {delegateInfo.nombre_completo}</h3>
+                            <p className="text-green-300 text-xs sm:text-sm">Panel de Control del Club: <span className="font-extrabold text-white uppercase">{delegateInfo.nombreEquipo}</span></p>
                         </div>
                     </div>
                     
                     <button
                         onClick={onLogout}
-                        className="bg-red-650 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors duration-200 shadow-md transform active:scale-95"
+                        className="bg-red-650 hover:bg-red-600 text-white px-4 py-2 rounded-lg text-sm font-bold flex items-center gap-2 transition-colors duration-200 shadow-md transform active:scale-95 flex-shrink-0"
                     >
                         <LogOut size={16} />
                         Cerrar Sesión
@@ -1140,7 +1140,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                 </div>
             </div>
                     {/* Buscador de Jugadores (Subsección Superior) */}
-            <div className="bg-white p-8 rounded-2xl shadow-lg border border-gray-100 relative z-30">
+            <div className="bg-white p-4 sm:p-8 rounded-2xl shadow-lg border border-gray-100 relative z-30">
                 <h4 className="text-xl font-bold text-gray-900 mb-2 flex items-center">
                     <Search className="w-5 h-5 mr-2 text-green-600" />
                     Buscador Global (Scouting)
@@ -1245,12 +1245,14 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
 
                 {/* Selected Player Details Card */}
                 {player && (
-                    <div className="mt-8 bg-gray-50 border border-gray-205 rounded-2xl p-6 animate-slide-up max-w-2xl mx-auto relative">
+                    <div className="mt-8 bg-gray-50 border border-gray-205 rounded-2xl p-4 sm:p-6 animate-slide-up max-w-2xl mx-auto relative">
                         <button 
                             onClick={() => setPlayer(null)}
-                            className="absolute top-4 right-4 text-xs font-bold text-gray-400 hover:text-red-600 transition-colors"
+                            className="absolute top-3 right-3 sm:top-4 sm:right-4 text-xs font-bold text-gray-400 hover:text-red-600 transition-colors bg-gray-200/50 sm:bg-transparent rounded-full p-1.5 sm:p-0"
+                            title="Cerrar Ficha"
                         >
-                            &times; Cerrar Ficha
+                            <span className="sm:hidden text-lg font-black px-1.5">&times;</span>
+                            <span className="hidden sm:inline">&times; Cerrar Ficha</span>
                         </button>
                         <div className="flex flex-col sm:flex-row items-center gap-6">
                             <img
@@ -1329,7 +1331,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                         }`}
                     >
                         <Users size={18} className="flex-shrink-0" />
-                        <span>Nómina de Jugadores</span>
+                        <span>Nómina<span className="hidden xs:inline"> de Jugadores</span></span>
                     </button>
                     <button
                         onClick={() => setActiveSubTab('fixture')}
@@ -1340,7 +1342,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                         }`}
                     >
                         <Calendar size={18} className="flex-shrink-0" />
-                        <span>Fixture {delegateInfo.nombreEquipo}</span>
+                        <span>Fixture<span className="hidden xs:inline"> {delegateInfo.nombreEquipo}</span></span>
                     </button>
                 </div>
 
@@ -1350,7 +1352,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                         <div className="space-y-6">
                             <div className="flex justify-between items-center border-b pb-4 flex-wrap gap-3">
                                 <div>
-                                    <h4 className="text-lg sm:text-xl font-bold text-gray-900">Nómina Oficial Habilitada - Gestión 2026</h4>
+                                    <h4 className="text-base sm:text-xl font-bold text-gray-900">Nómina Oficial Habilitada - Gestión 2026</h4>
                                     <p className="text-xs sm:text-sm text-gray-500 mt-1">
                                         Jugadores registrados oficialmente en la base de datos de la liga para este club durante la gestión 2026.
                                     </p>
@@ -1380,17 +1382,17 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                     <p className="text-gray-400 text-xs">No hay jugadores inscritos en la nómina 2026 de su club.</p>
                                 </div>
                             ) : (
-                                <div className="bg-white border border-gray-205 rounded-2xl overflow-hidden shadow-md max-w-7xl mx-auto my-4">
+                                <div className="bg-white border border-gray-250 rounded-2xl overflow-hidden shadow-md max-w-7xl mx-auto my-4">
                                     <div className="overflow-x-auto">
                                         <table className="min-w-full divide-y divide-gray-200 align-middle">
-                                            <thead className="bg-gray-50">
+                                            <thead className="bg-gray-55">
                                                 <tr>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Foto</th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Jugador</th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">C.I.</th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha Nac.</th>
-                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Categoría</th>
-                                                    <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Acciones</th>
+                                                    <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Foto</th>
+                                                    <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Jugador</th>
+                                                    <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">C.I.</th>
+                                                    <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha Nac.</th>
+                                                    <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Categoría</th>
+                                                    <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Acciones</th>
                                                 </tr>
                                             </thead>
                                             <tbody className="bg-white divide-y divide-gray-100">
@@ -1398,7 +1400,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                                     const playerPhoto = j.foto_url || (j.ci ? `https://flwrkxufkknrqbdlkvvp.supabase.co/storage/v1/object/public/fotos_jugadores/${j.ci.toString().trim()}.jpg` : '');
                                                     return (
                                                         <tr key={index} className="hover:bg-green-50/40 transition-colors duration-150">
-                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                            <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
                                                                 <img 
                                                                     src={playerPhoto || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(j.nombres)}
                                                                     alt={j.nombres}
@@ -1406,22 +1408,22 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                                                         e.target.onerror = null;
                                                                         e.target.src = 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(j.nombres);
                                                                     }}
-                                                                    className="w-12 h-12 rounded-full border border-green-700 bg-gray-50 object-cover shadow-sm"
+                                                                    className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border border-green-700 bg-gray-55 object-cover shadow-sm"
                                                                 />
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <div className="font-extrabold text-gray-900 text-sm">
+                                                            <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                <div className="font-extrabold text-gray-900 text-xs sm:text-sm">
                                                                     {j.nombres} {j.apellidos}
                                                                 </div>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <span className="font-bold text-gray-800 text-sm">{j.ci}</span>
+                                                            <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                <span className="font-bold text-gray-800 text-xs sm:text-sm">{j.ci}</span>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <span className="text-gray-700 text-sm">{j.fecha_nacimiento}</span>
+                                                            <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                <span className="text-gray-700 text-xs sm:text-sm">{j.fecha_nacimiento}</span>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap">
-                                                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                            <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                <span className={`inline-block px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
                                                                     j.categoria_jugador === 'refuerzo'
                                                                         ? 'bg-purple-100 text-purple-800 border border-purple-200'
                                                                         : j.categoria_jugador === 'juvenil'
@@ -1431,14 +1433,14 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                                                     {j.categoria_jugador}
                                                                 </span>
                                                             </td>
-                                                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                            <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap text-center">
                                                                 <button
                                                                     onClick={() => handleOpenEdit(j)}
-                                                                    className="inline-flex items-center gap-1.5 bg-gray-55 border border-gray-205 hover:bg-green-50 hover:border-green-450 hover:text-green-750 py-1.5 px-3 rounded-xl transition-all shadow-sm text-xs font-bold text-gray-600"
+                                                                    className="inline-flex items-center gap-1 bg-gray-50 border border-gray-205 hover:bg-green-50 hover:border-green-450 hover:text-green-750 py-1 px-2.5 sm:py-1.5 sm:px-3 rounded-lg sm:rounded-xl transition-all shadow-sm text-[10px] sm:text-xs font-bold text-gray-600"
                                                                     title="Editar Datos"
                                                                 >
-                                                                    <Edit2 size={12} />
-                                                                    <span>Editar</span>
+                                                                    <Edit2 size={11} />
+                                                                    <span className="hidden xs:inline">Editar</span>
                                                                 </button>
                                                             </td>
                                                         </tr>
@@ -1732,7 +1734,7 @@ const Footer = () => (
                         <span className="text-5xl text-green-500 font-black tracking-tighter -mt-1">VINTO</span>
                     </h3>
                     <p className="text-gray-400">
-                        Promoviendo el fútbol y los valores deportivos en nuestra comunidad desde 1985.
+                        Promoviendo el fútbol y los valores deportivos en nuestra comunidad desde 1963.
                     </p>
                 </div>
                 <div>
