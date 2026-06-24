@@ -998,15 +998,16 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
     // Edit Modal opening
     const handleOpenEdit = (p) => {
         setEditingPlayer(p);
+        const resolvedFotoUrl = p.foto_url || (p.ci ? `https://flwrkxufkknrqbdlkvvp.supabase.co/storage/v1/object/public/fotos_jugadores/${p.ci.toString().trim()}.jpg` : '');
         setEditForm({
             ci: p.ci,
             nombres: p.nombres || '',
             apellidos: p.apellidos || '',
             fecha_nacimiento: p.fecha_nacimiento || '',
             categoria_jugador: p.categoria_jugador || '',
-            foto_url: p.foto_url || ''
+            foto_url: resolvedFotoUrl
         });
-        setPhotoPreview(p.foto_url || '');
+        setPhotoPreview(resolvedFotoUrl);
         setNewPhotoFile(null);
         setEditError('');
         setSuccessMessage('');
@@ -1212,8 +1213,12 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                         >
                                             <div className="suggestion-info flex items-center gap-3">
                                                 <img 
-                                                    src={pCache.foto_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + pCache.nombres} 
+                                                    src={pCache.foto_url || (pCache.ci ? `https://flwrkxufkknrqbdlkvvp.supabase.co/storage/v1/object/public/fotos_jugadores/${pCache.ci.toString().trim()}.jpg` : '') || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(pCache.nombres)} 
                                                     alt={pCache.nombres}
+                                                    onError={(e) => {
+                                                        e.target.onerror = null;
+                                                        e.target.src = 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(pCache.nombres);
+                                                    }}
                                                     className="w-8 h-8 rounded-full border border-gray-205 object-cover bg-white flex-shrink-0"
                                                 />
                                                 <div>
@@ -1249,8 +1254,12 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                         </button>
                         <div className="flex flex-col sm:flex-row items-center gap-6">
                             <img
-                                src={player.foto_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + player.nombres}
+                                src={player.foto_url || (player.ci ? `https://flwrkxufkknrqbdlkvvp.supabase.co/storage/v1/object/public/fotos_jugadores/${player.ci.toString().trim()}.jpg` : '') || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(player.nombres)}
                                 alt={player.nombres}
+                                onError={(e) => {
+                                    e.target.onerror = null;
+                                    e.target.src = 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(player.nombres);
+                                }}
                                 className="w-28 h-28 rounded-full border-4 border-white bg-white shadow-md object-cover flex-shrink-0"
                             />
                             <div className="text-center sm:text-left flex-1">
@@ -1371,57 +1380,73 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                     <p className="text-gray-400 text-xs">No hay jugadores inscritos en la nómina 2026 de su club.</p>
                                 </div>
                             ) : (
-                                <div className="grid gap-6 sm:grid-cols-1 md:grid-cols-2 lg:grid-cols-3 max-w-7xl mx-auto py-4">
-                                    {[...nomina].sort((a, b) => a.nombres.localeCompare(b.nombres)).map((j, index) => (
-                                        <div
-                                            key={index}
-                                            className="bg-white border border-gray-200 rounded-2xl p-6 flex flex-col justify-between hover:border-green-500 hover:shadow-xl transition-all duration-300 shadow-md hover:-translate-y-1 transform group relative overflow-hidden"
-                                        >
-                                            <div className="flex items-start gap-4 mb-4">
-                                                <img 
-                                                    src={j.foto_url || 'https://api.dicebear.com/7.x/initials/svg?seed=' + j.nombres}
-                                                    alt={j.nombres}
-                                                    className="w-18 h-18 rounded-full border-2 border-green-700 bg-gray-50 object-cover flex-shrink-0 shadow-sm transition-transform duration-300 group-hover:scale-105"
-                                                />
-                                                <div className="flex-1 min-w-0">
-                                                    <h5 className="font-extrabold text-gray-900 text-base leading-snug truncate">
-                                                        {j.nombres} {j.apellidos}
-                                                    </h5>
-                                                    <div className="text-xs text-gray-400 mt-1.5 space-y-0.5">
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="font-semibold text-gray-500">C.I.:</span>
-                                                            <span className="font-bold text-gray-800">{j.ci}</span>
-                                                        </div>
-                                                        <div className="flex items-center gap-1">
-                                                            <span className="font-semibold text-gray-500">Nacimiento:</span>
-                                                            <span className="font-bold text-gray-800">{j.fecha_nacimiento}</span>
-                                                        </div>
-                                                    </div>
-                                                </div>
-                                            </div>
-                                            
-                                            <div className="flex items-center justify-between mt-2 pt-4 border-t border-gray-100">
-                                                <span className={`px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                                                    j.categoria_jugador === 'refuerzo'
-                                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
-                                                        : j.categoria_jugador === 'juvenil'
-                                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
-                                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
-                                                }`}>
-                                                    {j.categoria_jugador}
-                                                </span>
-                                                
-                                                <button
-                                                    onClick={() => handleOpenEdit(j)}
-                                                    className="bg-gray-50 border border-gray-205 hover:bg-green-50 hover:border-green-450 hover:text-green-750 py-2 px-4 rounded-xl transition-all shadow-sm flex items-center gap-1.5 text-xs font-bold text-gray-600"
-                                                    title="Editar Datos"
-                                                >
-                                                    <Edit2 size={13} />
-                                                    <span>Editar</span>
-                                                </button>
-                                            </div>
-                                        </div>
-                                    ))}
+                                <div className="bg-white border border-gray-205 rounded-2xl overflow-hidden shadow-md max-w-7xl mx-auto my-4">
+                                    <div className="overflow-x-auto">
+                                        <table className="min-w-full divide-y divide-gray-200 align-middle">
+                                            <thead className="bg-gray-50">
+                                                <tr>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Foto</th>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Jugador</th>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">C.I.</th>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha Nac.</th>
+                                                    <th scope="col" className="px-6 py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Categoría</th>
+                                                    <th scope="col" className="px-6 py-4 text-center text-xs font-bold text-gray-500 uppercase tracking-wider">Acciones</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="bg-white divide-y divide-gray-100">
+                                                {[...nomina].sort((a, b) => a.nombres.localeCompare(b.nombres)).map((j, index) => {
+                                                    const playerPhoto = j.foto_url || (j.ci ? `https://flwrkxufkknrqbdlkvvp.supabase.co/storage/v1/object/public/fotos_jugadores/${j.ci.toString().trim()}.jpg` : '');
+                                                    return (
+                                                        <tr key={index} className="hover:bg-green-50/40 transition-colors duration-150">
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <img 
+                                                                    src={playerPhoto || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(j.nombres)}
+                                                                    alt={j.nombres}
+                                                                    onError={(e) => {
+                                                                        e.target.onerror = null;
+                                                                        e.target.src = 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(j.nombres);
+                                                                    }}
+                                                                    className="w-12 h-12 rounded-full border border-green-700 bg-gray-50 object-cover shadow-sm"
+                                                                />
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <div className="font-extrabold text-gray-900 text-sm">
+                                                                    {j.nombres} {j.apellidos}
+                                                                </div>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <span className="font-bold text-gray-800 text-sm">{j.ci}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <span className="text-gray-700 text-sm">{j.fecha_nacimiento}</span>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap">
+                                                                <span className={`inline-block px-2.5 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                                                                    j.categoria_jugador === 'refuerzo'
+                                                                        ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                                                        : j.categoria_jugador === 'juvenil'
+                                                                        ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                                                        : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                                }`}>
+                                                                    {j.categoria_jugador}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-6 py-4 whitespace-nowrap text-center">
+                                                                <button
+                                                                    onClick={() => handleOpenEdit(j)}
+                                                                    className="inline-flex items-center gap-1.5 bg-gray-55 border border-gray-205 hover:bg-green-50 hover:border-green-450 hover:text-green-750 py-1.5 px-3 rounded-xl transition-all shadow-sm text-xs font-bold text-gray-600"
+                                                                    title="Editar Datos"
+                                                                >
+                                                                    <Edit2 size={12} />
+                                                                    <span>Editar</span>
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                        </table>
+                                    </div>
                                 </div>
                             )}
                         </div>
@@ -1532,8 +1557,12 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                             <div className="flex flex-col items-center justify-center gap-2">
                                 <div className="relative group w-24 h-24 rounded-full overflow-hidden border-2 border-green-700 bg-gray-50 shadow-md">
                                     <img 
-                                        src={photoPreview || 'https://api.dicebear.com/7.x/initials/svg?seed=' + editForm.nombres}
+                                        src={photoPreview || (editForm.ci ? `https://flwrkxufkknrqbdlkvvp.supabase.co/storage/v1/object/public/fotos_jugadores/${editForm.ci.toString().trim()}.jpg` : '') || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(editForm.nombres)}
                                         alt="Vista previa"
+                                        onError={(e) => {
+                                            e.target.onerror = null;
+                                            e.target.src = 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(editForm.nombres);
+                                        }}
                                         className="w-full h-full object-cover"
                                     />
                                     <label className="absolute inset-0 bg-black/60 opacity-0 group-hover:opacity-100 flex flex-col items-center justify-center text-white text-[10px] font-bold cursor-pointer transition-opacity">
