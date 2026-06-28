@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Menu, X, Search, Calendar, Trophy, Users, Phone, Home, Shield, ChevronRight, MapPin, Clock, Mail, Lock, LogOut, Edit2, Upload, CheckCircle2, AlertCircle, Eye } from 'lucide-react';
+import { Menu, X, Search, Calendar, Trophy, Users, Phone, Home, Shield, ChevronRight, MapPin, Clock, Mail, Lock, LogOut, Edit2, Upload, CheckCircle2, AlertCircle, Eye, History } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
 // --- MOCK DATA ---
@@ -837,6 +837,67 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
     const [editError, setEditError] = useState('');
     const [successMessage, setSuccessMessage] = useState('');
 
+    // Historical Roster States
+    const [historicalNomina, setHistoricalNomina] = useState([]);
+    const [showHistoricalModal, setShowHistoricalModal] = useState(false);
+    const [loadingHistorical, setLoadingHistorical] = useState(false);
+    const [historicalError, setHistoricalError] = useState('');
+    const [historicalSearchTerm, setHistoricalSearchTerm] = useState('');
+
+    const fetchNominaHistorica = async () => {
+        setLoadingHistorical(true);
+        setHistoricalError('');
+        try {
+            const { data, error } = await supabase
+                .from('historial_participacion')
+                .select(`
+                    id,
+                    año,
+                    categoria_jugador,
+                    jugadores (
+                        ci,
+                        nombres,
+                        apellidos,
+                        fecha_nacimiento,
+                        foto_url
+                    )
+                `)
+                .eq('equipo_id', delegateInfo.equipo_id);
+
+            if (error) throw error;
+
+            // Group by C.I. to keep the most recent registration
+            const playerMap = {};
+            (data || []).forEach(item => {
+                const player = item.jugadores;
+                if (!player) return;
+                const ci = player.ci || 'Sin C.I.';
+                const currentAño = item.año || 0;
+                
+                if (!playerMap[ci] || currentAño > playerMap[ci].ultimo_año) {
+                    playerMap[ci] = {
+                        ci,
+                        nombres: player.nombres || 'Desconocido',
+                        apellidos: player.apellidos || '',
+                        fecha_nacimiento: player.fecha_nacimiento || '',
+                        foto_url: player.foto_url || '',
+                        categoria_jugador: item.categoria_jugador || '',
+                        ultimo_año: currentAño
+                    };
+                }
+            });
+
+            const uniquePlayers = Object.values(playerMap);
+            setHistoricalNomina(uniquePlayers);
+            setShowHistoricalModal(true);
+        } catch (err) {
+            console.error("Error loading historical nomina:", err);
+            setHistoricalError('Error al cargar la nómina histórica. Por favor intente de nuevo.');
+        } finally {
+            setLoadingHistorical(false);
+        }
+    };
+
     // Load Nomina and Players Cache on mount or team change
     useEffect(() => {
         if (delegateInfo && delegateInfo.equipo_id) {
@@ -1451,6 +1512,26 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                     </div>
                                 </div>
                             )}
+
+                            <div className="flex justify-end mt-6 border-t border-gray-100 pt-4">
+                                <button
+                                    onClick={fetchNominaHistorica}
+                                    disabled={loadingHistorical}
+                                    className="inline-flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:bg-gray-400 text-white py-2.5 px-5 rounded-xl font-bold transition-all shadow-md text-xs sm:text-sm active:scale-95 duration-100"
+                                >
+                                    {loadingHistorical ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            <span>Cargando Historial...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <History size={15} />
+                                            <span>Nómina Histórica</span>
+                                        </>
+                                    )}
+                                </button>
+                            </div>
                         </div>
                     ) : (
                         /* PESTAÑA: FIXTURE DEL EQUIPO */
@@ -1659,6 +1740,158 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                 </button>
                             </div>
                         </form>
+                    </div>
+                </div>
+            )}
+
+            {/* MODAL DE NÓMINA HISTÓRICA */}
+            {showHistoricalModal && (
+                <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
+                    <div className="bg-white rounded-2xl shadow-2xl border border-gray-100 overflow-hidden max-w-4xl w-full flex flex-col max-h-[85vh] transform transition-all duration-300 animate-slide-up">
+                        <div className="bg-green-800 text-white px-6 py-4 flex items-center justify-between flex-shrink-0">
+                            <div>
+                                <h3 className="text-lg font-bold">Nómina Histórica de Jugadores</h3>
+                                <p className="text-green-200 text-xs mt-0.5">Historial completo de registros en el club (Solo Lectura)</p>
+                            </div>
+                            <button 
+                                onClick={() => {
+                                    setShowHistoricalModal(false);
+                                    setHistoricalSearchTerm('');
+                                }}
+                                className="text-white/80 hover:text-white transition-colors p-1"
+                            >
+                                <X size={20} />
+                            </button>
+                        </div>
+
+                        {/* Buscador dentro de la nómina histórica */}
+                        <div className="p-4 bg-gray-50 border-b border-gray-105 flex items-center gap-3 flex-shrink-0">
+                            <div className="relative flex-1">
+                                <span className="absolute inset-y-0 left-0 pl-3 flex items-center text-gray-400">
+                                    <Search size={16} />
+                                </span>
+                                <input
+                                    type="text"
+                                    placeholder="Buscar por nombre, apellido o C.I. en el historial..."
+                                    className="w-full pl-9 pr-4 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-green-500 outline-none transition-all"
+                                    value={historicalSearchTerm}
+                                    onChange={(e) => setHistoricalSearchTerm(e.target.value)}
+                                />
+                            </div>
+                            {historicalSearchTerm && (
+                                <button
+                                    onClick={() => setHistoricalSearchTerm('')}
+                                    className="text-xs font-bold text-gray-400 hover:text-gray-650 flex-shrink-0"
+                                >
+                                    Limpiar
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Contenido / Tabla */}
+                        <div className="flex-1 overflow-y-auto p-4 sm:p-6">
+                            {historicalError ? (
+                                <div className="bg-red-50 border-l-4 border-red-505 p-4 rounded-r-lg">
+                                    <p className="text-sm text-red-705 font-medium">{historicalError}</p>
+                                </div>
+                            ) : (() => {
+                                const filtered = historicalNomina.filter(j => {
+                                    const searchLower = historicalSearchTerm.toLowerCase().trim();
+                                    if (!searchLower) return true;
+                                    const fullname = `${j.nombres} ${j.apellidos}`.toLowerCase();
+                                    const ciStr = (j.ci || '').toString().toLowerCase();
+                                    return fullname.includes(searchLower) || ciStr.includes(searchLower);
+                                });
+
+                                if (filtered.length === 0) {
+                                    return (
+                                        <div className="text-center py-12 bg-gray-50 border border-dashed border-gray-300 rounded-xl">
+                                            <Users className="w-10 h-10 text-gray-300 mx-auto mb-2" />
+                                            <h6 className="font-bold text-gray-600 mb-0.5">Sin Coincidencias</h6>
+                                            <p className="text-gray-400 text-xs">No se encontraron jugadores que coincidan con la búsqueda.</p>
+                                        </div>
+                                    );
+                                }
+
+                                return (
+                                    <div className="border border-gray-205 rounded-xl overflow-hidden shadow-sm">
+                                        <div className="overflow-x-auto">
+                                            <table className="min-w-full divide-y divide-gray-200 align-middle">
+                                                <thead className="bg-gray-50">
+                                                    <tr>
+                                                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Foto</th>
+                                                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Jugador</th>
+                                                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">C.I.</th>
+                                                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Fecha Nac.</th>
+                                                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Última Gestión</th>
+                                                        <th scope="col" className="px-3 py-3 sm:px-6 sm:py-4 text-left text-xs font-bold text-gray-500 uppercase tracking-wider">Categoría</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody className="bg-white divide-y divide-gray-100">
+                                                    {[...filtered].sort((a, b) => a.nombres.localeCompare(b.nombres)).map((j, index) => {
+                                                        const playerPhoto = j.foto_url || (j.ci ? `https://flwrkxufkknrqbdlkvvp.supabase.co/storage/v1/object/public/fotos_jugadores/${j.ci.toString().trim()}.jpg` : '');
+                                                        return (
+                                                            <tr key={index} className="hover:bg-green-50/30 transition-colors duration-150">
+                                                                <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                    <img 
+                                                                        src={playerPhoto || 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(j.nombres)}
+                                                                        alt={j.nombres}
+                                                                        onError={(e) => {
+                                                                            e.target.onerror = null;
+                                                                            e.target.src = 'https://api.dicebear.com/7.x/initials/svg?seed=' + encodeURIComponent(j.nombres);
+                                                                        }}
+                                                                        className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border border-green-700 bg-gray-55 object-cover shadow-sm"
+                                                                    />
+                                                                </td>
+                                                                <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                    <div className="font-extrabold text-gray-900 text-xs sm:text-sm">
+                                                                        {j.nombres} {j.apellidos}
+                                                                    </div>
+                                                                </td>
+                                                                <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                    <span className="font-bold text-gray-800 text-xs sm:text-sm">{j.ci}</span>
+                                                                </td>
+                                                                <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                    <span className="text-gray-700 text-xs sm:text-sm">{j.fecha_nacimiento}</span>
+                                                                </td>
+                                                                <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                    <span className="bg-green-100 text-green-800 text-xs font-extrabold px-2.5 py-1 rounded-md">
+                                                                        Gestión {j.ultimo_año}
+                                                                    </span>
+                                                                </td>
+                                                                <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap">
+                                                                    <span className={`inline-block px-2 py-0.5 sm:px-2.5 sm:py-1 rounded-full text-[9px] sm:text-[10px] font-black uppercase tracking-wider ${
+                                                                        j.categoria_jugador === 'refuerzo'
+                                                                            ? 'bg-purple-100 text-purple-800 border border-purple-200'
+                                                                            : j.categoria_jugador === 'juvenil'
+                                                                            ? 'bg-amber-100 text-amber-800 border border-amber-200'
+                                                                            : 'bg-emerald-100 text-emerald-800 border border-emerald-200'
+                                                                    }`}>
+                                                                        {j.categoria_jugador}
+                                                                    </span>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                );
+                            })()}
+                        </div>
+
+                        <div className="bg-gray-50 px-6 py-4 flex justify-end border-t border-gray-105 flex-shrink-0">
+                            <button
+                                onClick={() => {
+                                    setShowHistoricalModal(false);
+                                    setHistoricalSearchTerm('');
+                                }}
+                                className="px-5 py-2 bg-green-750 hover:bg-green-800 text-white rounded-lg text-sm font-bold shadow transition-colors"
+                            >
+                                Cerrar
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
