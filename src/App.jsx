@@ -1497,7 +1497,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                                             <td className="px-3 py-3 sm:px-6 sm:py-4 whitespace-nowrap text-center">
                                                                 <button
                                                                     onClick={() => handleOpenEdit(j)}
-                                                                    className="inline-flex items-center gap-1 bg-gray-50 border border-gray-205 hover:bg-green-50 hover:border-green-450 hover:text-green-750 py-1 px-2.5 sm:py-1.5 sm:px-3 rounded-lg sm:rounded-xl transition-all shadow-sm text-[10px] sm:text-xs font-bold text-gray-600"
+                                                                    className="inline-flex items-center gap-1 bg-gray-50 border border-gray-200 hover:bg-green-50 hover:border-green-400 hover:text-green-700 py-1 px-2.5 sm:py-1.5 sm:px-3 rounded-lg sm:rounded-xl transition-all shadow-sm text-[10px] sm:text-xs font-bold text-gray-600"
                                                                     title="Editar Datos"
                                                                 >
                                                                     <Edit2 size={11} />
@@ -1726,7 +1726,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                 </button>
                                 <button
                                     type="submit"
-                                    className="px-5 py-2 bg-green-750 hover:bg-green-800 text-white rounded-lg text-sm font-bold shadow transition-colors flex items-center justify-center disabled:bg-gray-400"
+                                    className="px-5 py-2 bg-green-700 hover:bg-green-800 text-white rounded-lg text-sm font-bold shadow transition-colors flex items-center justify-center disabled:bg-gray-400"
                                     disabled={savingEdit}
                                 >
                                     {savingEdit ? (
@@ -1887,7 +1887,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                                     setShowHistoricalModal(false);
                                     setHistoricalSearchTerm('');
                                 }}
-                                className="px-5 py-2 bg-green-750 hover:bg-green-800 text-white rounded-lg text-sm font-bold shadow transition-colors"
+                                className="px-5 py-2 bg-green-700 hover:bg-green-800 text-white rounded-lg text-sm font-bold shadow transition-colors"
                             >
                                 Cerrar
                             </button>
