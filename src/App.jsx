@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Menu, X, Search, Calendar, Trophy, Users, Phone, Home, Shield, ChevronRight, MapPin, Clock, Mail, Lock, LogOut, Edit2, Upload, CheckCircle2, AlertCircle, Eye, History } from 'lucide-react';
 import { supabase } from './supabaseClient';
 
@@ -2005,6 +2005,7 @@ const App = () => {
     const [session, setSession] = useState(null);
     const [delegateInfo, setDelegateInfo] = useState(null);
     const [loadingAuth, setLoadingAuth] = useState(true);
+    const delegateUserIdRef = useRef(null);
 
     useEffect(() => {
         // Get initial session
@@ -2018,11 +2019,18 @@ const App = () => {
         });
 
         // Listen for auth changes
-        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, session) => {
-            setSession(session);
-            if (session) {
-                await fetchDelegateInfo(session.user.id);
+        const { data: { subscription } } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+            setSession(nextSession);
+            if (nextSession) {
+                // Supabase may emit SIGNED_IN again when the browser tab regains focus
+                // and TOKEN_REFRESHED while it is in the background. Re-fetching the
+                // delegate in those cases used to show the global loader, unmounting
+                // PanelEquipo and losing the open editor and its draft.
+                if (delegateUserIdRef.current !== nextSession.user.id) {
+                    await fetchDelegateInfo(nextSession.user.id);
+                }
             } else {
+                delegateUserIdRef.current = null;
                 setDelegateInfo(null);
                 setLoadingAuth(false);
             }
@@ -2032,6 +2040,9 @@ const App = () => {
     }, []);
 
     const fetchDelegateInfo = async (userId) => {
+        // Mark the user immediately so getSession and INITIAL_SESSION/SIGNED_IN
+        // cannot start the same load twice.
+        delegateUserIdRef.current = userId;
         setLoadingAuth(true);
         try {
             const { data: delegado, error: delError } = await supabase
@@ -2041,6 +2052,7 @@ const App = () => {
                 .single();
 
             if (delError || !delegado) {
+                delegateUserIdRef.current = null;
                 console.error("Error fetching delegate info:", delError);
                 await supabase.auth.signOut();
                 setSession(null);
@@ -2059,6 +2071,7 @@ const App = () => {
                 });
             }
         } catch (err) {
+            delegateUserIdRef.current = null;
             console.error(err);
         } finally {
             setLoadingAuth(false);
@@ -2067,6 +2080,7 @@ const App = () => {
 
     const handleLogout = async () => {
         await supabase.auth.signOut();
+        delegateUserIdRef.current = null;
         setSession(null);
         setDelegateInfo(null);
     };
@@ -2099,8 +2113,10 @@ const App = () => {
                     <PanelEquipo delegateInfo={delegateInfo} onLogout={handleLogout} />
                 ) : (
                     <LoginPanel onLoginSuccess={(sess, info) => {
+                        delegateUserIdRef.current = sess.user.id;
                         setSession(sess);
                         setDelegateInfo(info);
+                        setLoadingAuth(false);
                     }} />
                 );
             case 'contacto': return <Contacto />;
