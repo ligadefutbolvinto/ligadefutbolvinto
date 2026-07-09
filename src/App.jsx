@@ -484,6 +484,18 @@ const getFixtureJourneyLabel = (match) => {
     return 'Fecha por definir';
 };
 
+const getLatestFixtureJourneyValue = (matches, category = 'all') => {
+    const journeys = matches
+        .filter((match) => category === 'all' || match.categoria === category)
+        .map((match) => ({
+            value: String(match.numero_jornada ?? getFixtureJourneyLabel(match)),
+            order: match.numero_jornada ?? -1
+        }))
+        .sort((a, b) => b.order - a.order);
+
+    return journeys[0]?.value || 'all';
+};
+
 const getFixtureGroups = (matches) => {
     const groupedByCategory = new Map();
 
@@ -527,7 +539,7 @@ const getFixtureGroups = (matches) => {
         .map((categoryGroup) => ({
             ...categoryGroup,
             journeys: Array.from(categoryGroup.journeys.values())
-                .sort((a, b) => a.number - b.number)
+                .sort((a, b) => b.number - a.number)
                 .map((journeyGroup) => ({
                     ...journeyGroup,
                     dates: Array.from(journeyGroup.dates.entries())
@@ -548,6 +560,7 @@ const Fixture = () => {
     const [error, setError] = useState('');
     const [selectedCategory, setSelectedCategory] = useState('all');
     const [selectedJourney, setSelectedJourney] = useState('all');
+    const defaultJourneyAppliedRef = useRef(false);
 
     const loadFixture = async () => {
         setLoading(true);
@@ -567,7 +580,13 @@ const Fixture = () => {
             setError('No se pudo cargar el fixture. Intente nuevamente.');
             setMatches([]);
         } else {
-            setMatches(data || []);
+            const publishedMatches = data || [];
+            setMatches(publishedMatches);
+
+            if (!defaultJourneyAppliedRef.current) {
+                setSelectedJourney(getLatestFixtureJourneyValue(publishedMatches, selectedCategory));
+                defaultJourneyAppliedRef.current = true;
+            }
         }
 
         setLoading(false);
@@ -590,7 +609,7 @@ const Fixture = () => {
                     }
                 ])
         ).values()
-    ).sort((a, b) => a.order - b.order);
+    ).sort((a, b) => b.order - a.order);
 
     const filteredMatches = matches.filter((match) => {
         const matchJourneyValue = String(match.numero_jornada ?? getFixtureJourneyLabel(match));
@@ -619,8 +638,9 @@ const Fixture = () => {
                         <select
                             value={selectedCategory}
                             onChange={(event) => {
-                                setSelectedCategory(event.target.value);
-                                setSelectedJourney('all');
+                                const nextCategory = event.target.value;
+                                setSelectedCategory(nextCategory);
+                                setSelectedJourney(getLatestFixtureJourneyValue(matches, nextCategory));
                             }}
                             className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-100"
                         >
