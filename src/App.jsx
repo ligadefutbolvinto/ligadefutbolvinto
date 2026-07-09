@@ -437,66 +437,359 @@ const ClubJYana = ({ onBack }) => (
     </div>
 );
 
+const FIXTURE_CATEGORY_ORDER = [
+    'Primeras de Honor',
+    'Primeras de Ascenso',
+    'Segundas de Ascenso'
+];
+
+const normalizeFixtureDate = (value) => {
+    if (!value) return '';
+    return value.toString().slice(0, 10);
+};
+
+const formatFixtureDate = (value) => {
+    const normalizedDate = normalizeFixtureDate(value);
+    if (!normalizedDate) return 'Fecha por confirmar';
+
+    const [year, month, day] = normalizedDate.split('-').map(Number);
+    if (!year || !month || !day) return normalizedDate;
+
+    const formatted = new Intl.DateTimeFormat('es-BO', {
+        weekday: 'long',
+        day: 'numeric',
+        month: 'long',
+        year: 'numeric',
+        timeZone: 'America/La_Paz'
+    }).format(new Date(year, month - 1, day));
+
+    return formatted.charAt(0).toUpperCase() + formatted.slice(1);
+};
+
+const formatFixtureTime = (value) => {
+    if (!value) return 'Por definir';
+    return value.toString().slice(0, 5);
+};
+
+const getFixtureStatusLabel = (status) => {
+    const normalizedStatus = (status || '').toString().toLowerCase();
+    if (normalizedStatus === 'reprogramado') return 'Reprogramado';
+    if (normalizedStatus === 'suspendido') return 'Suspendido';
+    return '';
+};
+
+const getFixtureJourneyLabel = (match) => {
+    if (match.numero_jornada) return `Fecha ${match.numero_jornada}`;
+    if (match.jornada) return match.jornada;
+    return 'Fecha por definir';
+};
+
+const getFixtureGroups = (matches) => {
+    const groupedByCategory = new Map();
+
+    matches.forEach((match) => {
+        const category = match.categoria || 'Sin categoría';
+        const journeyNumber = match.numero_jornada ?? 9999;
+        const journeyLabel = getFixtureJourneyLabel(match);
+        const journeyKey = `${journeyNumber}-${journeyLabel}`;
+        const calendarDate = normalizeFixtureDate(match.fecha_programada) || 'sin-fecha';
+
+        if (!groupedByCategory.has(category)) {
+            groupedByCategory.set(category, {
+                category,
+                journeys: new Map()
+            });
+        }
+
+        const categoryGroup = groupedByCategory.get(category);
+        if (!categoryGroup.journeys.has(journeyKey)) {
+            categoryGroup.journeys.set(journeyKey, {
+                number: journeyNumber,
+                label: journeyLabel,
+                dates: new Map()
+            });
+        }
+
+        const journeyGroup = categoryGroup.journeys.get(journeyKey);
+        if (!journeyGroup.dates.has(calendarDate)) {
+            journeyGroup.dates.set(calendarDate, []);
+        }
+
+        journeyGroup.dates.get(calendarDate).push(match);
+    });
+
+    return Array.from(groupedByCategory.values())
+        .sort((a, b) => {
+            const aIndex = FIXTURE_CATEGORY_ORDER.indexOf(a.category);
+            const bIndex = FIXTURE_CATEGORY_ORDER.indexOf(b.category);
+            return (aIndex === -1 ? 99 : aIndex) - (bIndex === -1 ? 99 : bIndex);
+        })
+        .map((categoryGroup) => ({
+            ...categoryGroup,
+            journeys: Array.from(categoryGroup.journeys.values())
+                .sort((a, b) => a.number - b.number)
+                .map((journeyGroup) => ({
+                    ...journeyGroup,
+                    dates: Array.from(journeyGroup.dates.entries())
+                        .sort(([dateA], [dateB]) => dateA.localeCompare(dateB))
+                        .map(([date, matchesForDate]) => ({
+                            date,
+                            matches: matchesForDate.sort((a, b) =>
+                                `${a.hora_programada || ''}`.localeCompare(`${b.hora_programada || ''}`)
+                            )
+                        }))
+                }))
+        }));
+};
+
 const Fixture = () => {
-    const [subTab, setSubTab] = useState('honor');
+    const [matches, setMatches] = useState([]);
+    const [loading, setLoading] = useState(true);
+    const [error, setError] = useState('');
+    const [selectedCategory, setSelectedCategory] = useState('all');
+    const [selectedJourney, setSelectedJourney] = useState('all');
 
-    const subTabs = [
-        { id: 'honor', label: 'Primera de Honor' },
-        { id: 'ascenso_1', label: 'Primera de Ascenso' },
-        { id: 'ascenso_2', label: 'Segunda de Ascenso' }
-    ];
+    const loadFixture = async () => {
+        setLoading(true);
+        setError('');
 
-    const renderPartidosVacios = () => (
-        <div className="space-y-4">
-            {[1, 2, 3].map((num) => (
-                <div key={num} className="bg-white rounded-xl shadow-md p-6 border-l-4 border-gray-350 flex flex-col md:flex-row items-center justify-between gap-4 animate-pulse">
-                    <div className="flex items-center gap-4 text-gray-400">
-                        <Calendar className="w-5 h-5" />
-                        <span className="font-medium text-sm">Fecha y Hora por programar</span>
-                    </div>
-                    <div className="flex items-center gap-4">
-                        <span className="font-bold text-gray-400 text-lg">Equipo A</span>
-                        <span className="font-black text-gray-300">VS</span>
-                        <span className="font-bold text-gray-400 text-lg">Equipo B</span>
-                    </div>
-                    <div>
-                        <span className="px-3 py-1 bg-gray-100 text-gray-400 text-xs font-bold rounded-full uppercase tracking-wide">
-                            Por definir
-                        </span>
-                    </div>
-                </div>
-            ))}
-        </div>
-    );
+        const { data, error: fixtureError } = await supabase
+            .from('vista_fixture_publico')
+            .select('*')
+            .eq('temporada', 2026)
+            .order('categoria', { ascending: true })
+            .order('numero_jornada', { ascending: true })
+            .order('fecha_programada', { ascending: true })
+            .order('hora_programada', { ascending: true });
+
+        if (fixtureError) {
+            console.error('Error cargando fixture público:', fixtureError);
+            setError('No se pudo cargar el fixture. Intente nuevamente.');
+            setMatches([]);
+        } else {
+            setMatches(data || []);
+        }
+
+        setLoading(false);
+    };
+
+    useEffect(() => {
+        loadFixture();
+    }, []);
+
+    const journeyOptions = Array.from(
+        new Map(
+            matches
+                .filter((match) => selectedCategory === 'all' || match.categoria === selectedCategory)
+                .map((match) => [
+                    match.numero_jornada ?? getFixtureJourneyLabel(match),
+                    {
+                        value: String(match.numero_jornada ?? getFixtureJourneyLabel(match)),
+                        label: match.numero_jornada ? `Fecha ${match.numero_jornada}` : getFixtureJourneyLabel(match),
+                        order: match.numero_jornada ?? 9999
+                    }
+                ])
+        ).values()
+    ).sort((a, b) => a.order - b.order);
+
+    const filteredMatches = matches.filter((match) => {
+        const matchJourneyValue = String(match.numero_jornada ?? getFixtureJourneyLabel(match));
+        const categoryMatches = selectedCategory === 'all' || match.categoria === selectedCategory;
+        const journeyMatches = selectedJourney === 'all' || matchJourneyValue === selectedJourney;
+        return categoryMatches && journeyMatches;
+    });
+
+    const fixtureGroups = getFixtureGroups(filteredMatches);
 
     return (
-        <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
-            <h2 className="text-3xl font-bold text-gray-900 mb-8 border-b-2 border-green-500 pb-2 inline-block">
-                Próximos Partidos
-            </h2>
-            
-            {/* Subpestañas */}
-            <div className="flex bg-gray-100 rounded-lg p-1.5 mb-8 max-w-2xl">
-                {subTabs.map((tab) => (
-                    <button
-                        key={tab.id}
-                        onClick={() => setSubTab(tab.id)}
-                        className={`flex-1 py-2.5 text-center font-bold text-sm rounded-md transition-all ${
-                            subTab === tab.id
-                                ? 'bg-green-700 text-white shadow'
-                                : 'bg-transparent text-gray-600 hover:text-gray-900'
-                        }`}
-                    >
-                        {tab.label}
-                    </button>
-                ))}
+        <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-12 animate-fade-in">
+            <div className="mb-8">
+                <h2 className="text-3xl font-bold text-gray-900 border-b-2 border-green-500 pb-2 inline-block">
+                    Fixture Oficial
+                </h2>
+                <p className="mt-4 text-gray-600 max-w-3xl">
+                    Programación oficial de partidos publicada por la Liga de Fútbol de Vinto.
+                </p>
             </div>
 
-            {renderPartidosVacios()}
+            <div className="bg-white rounded-2xl shadow-md border border-gray-100 p-4 sm:p-6 mb-8">
+                <div className="grid grid-cols-1 md:grid-cols-[1fr_1fr_auto] gap-4">
+                    <label className="flex flex-col gap-2">
+                        <span className="text-sm font-bold text-gray-700">Categoría</span>
+                        <select
+                            value={selectedCategory}
+                            onChange={(event) => {
+                                setSelectedCategory(event.target.value);
+                                setSelectedJourney('all');
+                            }}
+                            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-100"
+                        >
+                            <option value="all">Todas las categorías</option>
+                            {FIXTURE_CATEGORY_ORDER.map((category) => (
+                                <option key={category} value={category}>{category}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <label className="flex flex-col gap-2">
+                        <span className="text-sm font-bold text-gray-700">Jornada</span>
+                        <select
+                            value={selectedJourney}
+                            onChange={(event) => setSelectedJourney(event.target.value)}
+                            className="w-full rounded-lg border border-gray-300 px-4 py-3 text-gray-800 focus:border-green-600 focus:outline-none focus:ring-2 focus:ring-green-100"
+                        >
+                            <option value="all">Todas las fechas</option>
+                            {journeyOptions.map((journey) => (
+                                <option key={journey.value} value={journey.value}>{journey.label}</option>
+                            ))}
+                        </select>
+                    </label>
+
+                    <button
+                        onClick={loadFixture}
+                        disabled={loading}
+                        className="self-end rounded-lg bg-green-700 px-6 py-3 font-bold text-white shadow hover:bg-green-800 transition-colors disabled:cursor-not-allowed disabled:bg-green-300"
+                    >
+                        {loading ? 'Actualizando...' : 'Actualizar'}
+                    </button>
+                </div>
+            </div>
+
+            {loading && (
+                <div className="bg-white rounded-xl shadow-md p-8 text-center text-gray-600 font-semibold">
+                    Cargando fixture...
+                </div>
+            )}
+
+            {!loading && error && (
+                <div className="bg-red-50 border border-red-200 rounded-xl p-6 text-red-700 flex items-start gap-3">
+                    <AlertCircle className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                    <span>{error}</span>
+                </div>
+            )}
+
+            {!loading && !error && fixtureGroups.length === 0 && (
+                <div className="bg-green-50 border border-green-200 rounded-xl p-8 text-center">
+                    <Calendar className="w-10 h-10 text-green-700 mx-auto mb-3" />
+                    <p className="text-gray-700 font-semibold">
+                        Aún no hay jornadas publicadas. La programación será actualizada cuando la Liga confirme oficialmente los partidos.
+                    </p>
+                </div>
+            )}
+
+            {!loading && !error && fixtureGroups.length > 0 && (
+                <div className="space-y-8">
+                    {fixtureGroups.map((categoryGroup) => (
+                        <section key={categoryGroup.category} className="space-y-5">
+                            <h3 className="text-2xl font-black text-green-800">{categoryGroup.category}</h3>
+
+                            {categoryGroup.journeys.map((journeyGroup) => (
+                                <div key={`${categoryGroup.category}-${journeyGroup.label}`} className="bg-white rounded-2xl shadow-lg border border-gray-100 overflow-hidden">
+                                    <div className="bg-green-700 text-white px-5 py-4">
+                                        <h4 className="text-xl font-bold">{journeyGroup.label}</h4>
+                                    </div>
+
+                                    {journeyGroup.dates.map((dateGroup) => (
+                                        <div key={`${journeyGroup.label}-${dateGroup.date}`} className="border-t border-gray-100 first:border-t-0">
+                                            <div className="bg-gray-50 px-5 py-3 flex items-center gap-2 text-gray-800 font-bold">
+                                                <Calendar className="w-5 h-5 text-green-700" />
+                                                <span>{formatFixtureDate(dateGroup.date)}</span>
+                                            </div>
+
+                                            <div className="hidden md:block">
+                                                <table className="min-w-full divide-y divide-gray-200">
+                                                    <thead className="bg-white text-gray-500">
+                                                        <tr>
+                                                            <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Hora</th>
+                                                            <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Cancha</th>
+                                                            <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Partido</th>
+                                                            <th className="px-5 py-3 text-left text-xs font-bold uppercase tracking-wider">Estado</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody className="divide-y divide-gray-100">
+                                                        {dateGroup.matches.map((match) => {
+                                                            const statusLabel = getFixtureStatusLabel(match.estado_partido);
+
+                                                            return (
+                                                                <tr key={match.partido_id} className="hover:bg-green-50/50">
+                                                                    <td className="px-5 py-4 font-bold text-gray-900 whitespace-nowrap">
+                                                                        {formatFixtureTime(match.hora_programada)}
+                                                                    </td>
+                                                                    <td className="px-5 py-4 text-gray-600">
+                                                                        {match.cancha_programada || 'Cancha por confirmar'}
+                                                                    </td>
+                                                                    <td className="px-5 py-4">
+                                                                        <span className="font-bold text-gray-900">{match.equipo_local || 'Equipo local'}</span>
+                                                                        <span className="mx-3 text-gray-400 font-black">VS</span>
+                                                                        <span className="font-bold text-gray-900">{match.equipo_visitante || 'Equipo visitante'}</span>
+                                                                    </td>
+                                                                    <td className="px-5 py-4">
+                                                                        {statusLabel ? (
+                                                                            <span className={`inline-flex rounded-full px-3 py-1 text-xs font-bold uppercase tracking-wide ${
+                                                                                statusLabel === 'Suspendido'
+                                                                                    ? 'bg-red-100 text-red-700'
+                                                                                    : 'bg-yellow-100 text-yellow-700'
+                                                                            }`}>
+                                                                                {statusLabel}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="text-gray-400 text-sm">-</span>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+
+                                            <div className="md:hidden divide-y divide-gray-100">
+                                                {dateGroup.matches.map((match) => {
+                                                    const statusLabel = getFixtureStatusLabel(match.estado_partido);
+
+                                                    return (
+                                                        <article key={match.partido_id} className="p-5 space-y-4">
+                                                            <div className="flex items-center justify-between gap-3 text-sm">
+                                                                <span className="inline-flex items-center gap-2 font-bold text-gray-800">
+                                                                    <Clock className="w-4 h-4 text-green-700" />
+                                                                    {formatFixtureTime(match.hora_programada)}
+                                                                </span>
+                                                                {statusLabel && (
+                                                                    <span className={`rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-wide ${
+                                                                        statusLabel === 'Suspendido'
+                                                                            ? 'bg-red-100 text-red-700'
+                                                                            : 'bg-yellow-100 text-yellow-700'
+                                                                    }`}>
+                                                                        {statusLabel}
+                                                                    </span>
+                                                                )}
+                                                            </div>
+
+                                                            <div className="text-center">
+                                                                <p className="text-lg font-black text-gray-900">{match.equipo_local || 'Equipo local'}</p>
+                                                                <p className="text-xs font-black text-gray-400 my-1">VS</p>
+                                                                <p className="text-lg font-black text-gray-900">{match.equipo_visitante || 'Equipo visitante'}</p>
+                                                            </div>
+
+                                                            <div className="flex items-center justify-center gap-2 text-sm text-gray-600">
+                                                                <MapPin className="w-4 h-4 text-green-700" />
+                                                                <span>{match.cancha_programada || 'Cancha por confirmar'}</span>
+                                                            </div>
+                                                        </article>
+                                                    );
+                                                })}
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            ))}
+                        </section>
+                    ))}
+                </div>
+            )}
         </div>
     );
 };
-
 const TablaPosiciones = () => {
     const [subTab, setSubTab] = useState('honor');
 
