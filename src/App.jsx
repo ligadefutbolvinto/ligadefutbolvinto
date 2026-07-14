@@ -974,18 +974,113 @@ const Institucional = () => (
 
 // --- DELEGADO & PANEL DE EQUIPOS SIMULATION DATA ---
 
-const jyanaFixtureData = [
-    { fecha: "Domingo 07/06/2026", hora: "09:30", rival: "Avaroa", cancha: "Cancha Licenciada", condicion: "Local" },
-    { fecha: "Domingo 14/06/2026", hora: "15:30", rival: "Bush Vinto", cancha: "Stadium Vinto", condicion: "Visitante" },
-    { fecha: "Domingo 21/06/2026", hora: "11:00", rival: "Peñarol", cancha: "Cancha Licenciada", condicion: "Local" },
-    { fecha: "Domingo 28/06/2026", hora: "14:00", rival: "Bush Vinto Junior", cancha: "Stadium Vinto", condicion: "Visitante" },
-    { fecha: "Domingo 05/07/2026", hora: "08:30", rival: "Millonarios", cancha: "Cancha Licenciada", condicion: "Local" },
-    { fecha: "Domingo 12/07/2026", hora: "16:30", rival: "Amanecer", cancha: "Stadium Vinto", condicion: "Visitante" },
-    { fecha: "Domingo 19/07/2026", hora: "13:00", rival: "The Strongest", cancha: "Cancha Licenciada", condicion: "Local" },
-    { fecha: "Domingo 26/07/2026", hora: "10:00", rival: "Olimpic", cancha: "Stadium Vinto", condicion: "Visitante" },
-    { fecha: "Domingo 02/08/2026", hora: "15:00", rival: "Deportivo Kali", cancha: "Cancha Licenciada", condicion: "Local" }
-];
 
+const PANEL_FIXTURE_RLS_HINT = 'Si el fixture ya fue cargado en el panel administrativo, falta una política SELECT o una RPC segura para que los delegados autenticados lean únicamente los partidos donde participa su equipo.';
+
+const getPanelFixtureStatusLabel = (status) => {
+    const normalizedStatus = (status || '').toString().toLowerCase();
+    const labels = {
+        publicado: 'Publicado',
+        confirmado: 'Confirmado',
+        plantilla: 'Plantilla',
+        borrador: 'Borrador',
+        suspendido: 'Suspendido',
+        reprogramado: 'Reprogramado',
+        jugado: 'Jugado',
+        observado: 'Observado',
+        pendiente: 'Pendiente'
+    };
+    return labels[normalizedStatus] || normalizedStatus || 'Pendiente';
+};
+
+const getPanelFixtureStatusClass = (status) => {
+    const normalizedStatus = (status || '').toString().toLowerCase();
+    const classes = {
+        publicado: 'bg-emerald-100 text-emerald-800 border-emerald-200',
+        confirmado: 'bg-blue-100 text-blue-800 border-blue-200',
+        plantilla: 'bg-gray-100 text-gray-700 border-gray-200',
+        borrador: 'bg-gray-100 text-gray-700 border-gray-200',
+        suspendido: 'bg-red-100 text-red-800 border-red-200',
+        reprogramado: 'bg-orange-100 text-orange-800 border-orange-200',
+        jugado: 'bg-slate-800 text-white border-slate-700',
+        observado: 'bg-yellow-100 text-yellow-800 border-yellow-200'
+    };
+    return classes[normalizedStatus] || 'bg-gray-100 text-gray-700 border-gray-200';
+};
+
+const getPanelFixtureCategoryOrder = (category) => {
+    const index = FIXTURE_CATEGORY_ORDER.indexOf(category);
+    return index === -1 ? 99 : index;
+};
+
+const getPanelFixtureDateValue = (date) => date ? new Date(`${normalizeFixtureDate(date)}T00:00:00-04:00`).getTime() : 0;
+
+const mapTeamFixtureMatch = (match, equipoId, fallbackTeamName) => {
+    const localId = match.equipo_local_id?.toString();
+    const visitanteId = match.equipo_visitante_id?.toString();
+    const teamId = equipoId?.toString();
+    const isLocal = localId === teamId;
+    const participates = isLocal || visitanteId === teamId;
+    const jornada = match.jornada || {};
+    const competicion = jornada.competicion || {};
+    const estado = (match.estado || 'pendiente').toString().toLowerCase();
+    const jornadaEstado = (jornada.estado || '').toString().toLowerCase();
+    const estadoVisible = estado || jornadaEstado || 'pendiente';
+    const hasCalendarDate = Boolean(match.fecha_programada);
+    const displayTime = formatFixtureTime(match.hora_programada || match.hora_base);
+    const displayCourt = match.cancha_programada || match.cancha_base || 'Cancha por confirmar';
+    const rival = isLocal ? match.visitante?.nombre : match.local?.nombre;
+    const miEquipo = isLocal ? match.local?.nombre : match.visitante?.nombre;
+
+    if (!participates) return null;
+
+    return {
+        id: match.id,
+        ordenSlot: match.orden_slot ?? 9999,
+        categoria: competicion.categoria || 'Sin categoría',
+        temporada: competicion.temporada,
+        numeroJornada: jornada.numero_jornada ?? 9999,
+        jornadaNombre: jornada.numero_jornada ? `Fecha ${jornada.numero_jornada}` : (jornada.nombre || 'Fecha por definir'),
+        estado,
+        jornadaEstado,
+        estadoVisible,
+        fechaProgramada: normalizeFixtureDate(match.fecha_programada),
+        diaBase: match.dia_base || '',
+        displayTime,
+        displayCourt,
+        hasCalendarDate,
+        miEquipo: miEquipo || fallbackTeamName || 'Mi equipo',
+        rival: rival || 'Rival por definir',
+        condicion: isLocal ? 'Local' : 'Visitante',
+        isPublished: estado === 'publicado' || jornadaEstado === 'publicado',
+        sortDate: getPanelFixtureDateValue(match.fecha_programada)
+    };
+};
+
+const sortTeamFixtureMatches = (matches) => ([...matches].sort((a, b) => {
+    const aHasConfirmedCalendar = a.hasCalendarDate && ['publicado', 'confirmado', 'reprogramado', 'jugado'].includes(a.estadoVisible);
+    const bHasConfirmedCalendar = b.hasCalendarDate && ['publicado', 'confirmado', 'reprogramado', 'jugado'].includes(b.estadoVisible);
+    if (aHasConfirmedCalendar !== bHasConfirmedCalendar) return aHasConfirmedCalendar ? -1 : 1;
+
+    const categoryDiff = getPanelFixtureCategoryOrder(a.categoria) - getPanelFixtureCategoryOrder(b.categoria);
+    if (categoryDiff !== 0) return categoryDiff;
+    if (a.numeroJornada !== b.numeroJornada) return a.numeroJornada - b.numeroJornada;
+    if (a.sortDate !== b.sortDate) return a.sortDate - b.sortDate;
+    if (a.displayTime !== b.displayTime) return a.displayTime.localeCompare(b.displayTime);
+    return a.ordenSlot - b.ordenSlot;
+}));
+
+const getLatestPublishedTeamFixtureId = (matches) => {
+    const publishedMatches = matches.filter((match) => match.isPublished);
+    if (publishedMatches.length === 0) return null;
+
+    return [...publishedMatches]
+        .sort((a, b) => {
+            if (a.numeroJornada !== b.numeroJornada) return b.numeroJornada - a.numeroJornada;
+            if (a.sortDate !== b.sortDate) return b.sortDate - a.sortDate;
+            return a.ordenSlot - b.ordenSlot;
+        })[0].id;
+};
 const LoginPanel = ({ onLoginSuccess }) => {
     const [username, setUsername] = useState('');
     const [password, setPassword] = useState('');
@@ -1134,6 +1229,12 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
     const [loadingNomina, setLoadingNomina] = useState(false);
     const [nominaError, setNominaError] = useState('');
 
+    // Team Fixture States
+    const [teamFixture, setTeamFixture] = useState([]);
+    const [loadingTeamFixture, setLoadingTeamFixture] = useState(false);
+    const [teamFixtureError, setTeamFixtureError] = useState('');
+    const [latestPublishedFixtureId, setLatestPublishedFixtureId] = useState(null);
+
     // Editing Player States
     const [editingPlayer, setEditingPlayer] = useState(null);
     const [editForm, setEditForm] = useState({
@@ -1216,6 +1317,7 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
         if (delegateInfo && delegateInfo.equipo_id) {
             fetchNomina();
             fetchPlayersCache();
+            fetchTeamFixture();
         }
     }, [delegateInfo]);
 
@@ -1240,6 +1342,77 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
         return () => document.removeEventListener('click', handleClickOutside);
     }, []);
 
+    const fetchTeamFixture = async () => {
+        if (!delegateInfo?.equipo_id) {
+            setTeamFixture([]);
+            setLatestPublishedFixtureId(null);
+            setTeamFixtureError('No se pudo identificar el equipo asignado a este usuario.');
+            return;
+        }
+
+        setLoadingTeamFixture(true);
+        setTeamFixtureError('');
+
+        try {
+            const { data, error } = await supabase
+                .from('fixture_partidos')
+                .select(`
+                    id,
+                    orden_slot,
+                    equipo_local_id,
+                    equipo_visitante_id,
+                    dia_base,
+                    hora_base,
+                    cancha_base,
+                    fecha_programada,
+                    hora_programada,
+                    cancha_programada,
+                    estado,
+                    jornada:fixture_jornadas(
+                        id,
+                        numero_jornada,
+                        nombre,
+                        estado,
+                        fecha_sabado,
+                        fecha_domingo,
+                        competicion:fixture_competiciones(
+                            id,
+                            temporada,
+                            categoria,
+                            nombre
+                        )
+                    ),
+                    local:equipos!fixture_partidos_equipo_local_id_fkey(id, nombre),
+                    visitante:equipos!fixture_partidos_equipo_visitante_id_fkey(id, nombre)
+                `)
+                .or(`equipo_local_id.eq.${delegateInfo.equipo_id},equipo_visitante_id.eq.${delegateInfo.equipo_id}`)
+                .order('orden_slot', { ascending: true });
+
+            if (error) throw error;
+
+            const sortedFixture = sortTeamFixtureMatches(
+                (data || [])
+                    .filter((match) => match.jornada?.competicion?.temporada === 2026)
+                    .map((match) => mapTeamFixtureMatch(match, delegateInfo.equipo_id, delegateInfo.nombreEquipo))
+                    .filter(Boolean)
+            );
+            const latestPublishedId = getLatestPublishedTeamFixtureId(sortedFixture);
+            const latestPublishedMatch = sortedFixture.find((match) => match.id === latestPublishedId);
+            const visibleFixture = latestPublishedMatch
+                ? [latestPublishedMatch, ...sortedFixture.filter((match) => match.id !== latestPublishedId)]
+                : sortedFixture;
+
+            setTeamFixture(visibleFixture);
+            setLatestPublishedFixtureId(latestPublishedId);
+        } catch (err) {
+            console.error('Error loading team fixture:', err);
+            setTeamFixture([]);
+            setLatestPublishedFixtureId(null);
+            setTeamFixtureError(`No se pudo cargar el fixture del equipo. ${PANEL_FIXTURE_RLS_HINT}`);
+        } finally {
+            setLoadingTeamFixture(false);
+        }
+    };
     const fetchPlayersCache = async () => {
         setLoadingCache(true);
         try {
@@ -1849,77 +2022,134 @@ const PanelEquipo = ({ delegateInfo, onLogout }) => {
                     ) : (
                         /* PESTAÑA: FIXTURE DEL EQUIPO */
                         <div className="space-y-6">
-                            <div className="flex justify-between items-center border-b pb-4 flex-wrap gap-2">
-                                <h4 className="text-lg sm:text-xl font-bold text-gray-900">Fixture de Partidos - Temporada 2026</h4>
-                                <span className="bg-green-100 text-green-800 text-xs font-bold px-3 py-1 rounded-full border border-green-200">
-                                    Categoría Honor
-                                </span>
+                            <div className="flex justify-between items-center border-b pb-4 flex-wrap gap-3">
+                                <div>
+                                    <h4 className="text-lg sm:text-xl font-bold text-gray-900">Fixture de Partidos - Temporada 2026</h4>
+                                    <p className="text-xs sm:text-sm text-gray-500 mt-1">Partidos oficiales donde participa {delegateInfo.nombreEquipo}. Vista solo de consulta.</p>
+                                </div>
+                                <button
+                                    onClick={fetchTeamFixture}
+                                    disabled={loadingTeamFixture}
+                                    className="inline-flex items-center gap-2 bg-green-700 hover:bg-green-800 disabled:bg-gray-400 text-white py-2.5 px-5 rounded-xl font-bold transition-all shadow-md text-xs sm:text-sm active:scale-95 duration-100"
+                                >
+                                    {loadingTeamFixture ? (
+                                        <>
+                                            <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
+                                            <span>Actualizando...</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <Calendar size={15} />
+                                            <span>Actualizar fixture</span>
+                                        </>
+                                    )}
+                                </button>
                             </div>
-                            
-                            <div className="grid gap-4">
-                                {jyanaFixtureData.map((partido, index) => (
-                                    <div
-                                        key={index}
-                                        className="bg-gray-50 border border-gray-205 rounded-xl p-4 sm:p-5 hover:shadow-md transition-shadow flex flex-col md:flex-row items-center justify-between gap-4 md:gap-6"
-                                    >
-                                        <div className="flex flex-col sm:flex-row items-center gap-4 sm:gap-6 flex-1 w-full">
-                                            <span className={`px-2.5 py-1 rounded-full text-[10px] sm:text-xs font-black uppercase tracking-wider text-center w-20 sm:w-24 flex-shrink-0 ${
-                                                partido.condicion === 'Local' 
-                                                    ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                                                    : 'bg-indigo-100 text-indigo-805 border border-indigo-200'
-                                            }`}>
-                                                {partido.condicion}
-                                            </span>
 
-                                            <div className="flex items-center justify-center gap-2 xs:gap-4 flex-1 w-full sm:w-auto">
-                                                <div className="flex items-center gap-1.5 xs:gap-2 justify-end text-right w-24 xs:w-28 sm:w-36">
-                                                    <span className="font-extrabold text-gray-800 text-xs xs:text-sm md:text-base truncate">{delegateInfo.nombreEquipo}</span>
-                                                    {(() => {
-                                                        const logo = getLogo(delegateInfo.nombreEquipo);
-                                                        return logo ? (
-                                                            <img src={logo} alt={delegateInfo.nombreEquipo} className="w-8 h-8 xs:w-10 xs:h-10 object-contain flex-shrink-0" />
-                                                        ) : (
-                                                            <Shield className="w-8 h-8 text-green-700 flex-shrink-0" />
-                                                        );
-                                                    })()}
-                                                </div>
-                                                <span className="font-black text-gray-300 text-xs xs:text-sm">VS</span>
-                                                <div className="flex items-center gap-1.5 xs:gap-2 justify-start text-left w-24 xs:w-28 sm:w-36">
-                                                    {getLogo(partido.rival) ? (
-                                                        <img src={getLogo(partido.rival)} alt={partido.rival} className="w-8 h-8 xs:w-10 xs:h-10 object-contain flex-shrink-0" />
-                                                    ) : (
-                                                        <Shield className="w-8 h-8 text-green-700 flex-shrink-0" />
-                                                    )}
-                                                    <span className="font-extrabold text-gray-800 text-xs xs:text-sm md:text-base truncate">{partido.rival}</span>
-                                                </div>
-                                            </div>
-                                        </div>
-
-                                        <div className="flex flex-wrap items-center justify-center md:justify-end gap-3 sm:gap-4 w-full md:w-auto text-xs sm:text-sm text-gray-600 border-t md:border-t-0 pt-3 md:pt-0">
-                                            <div className="flex items-center gap-1.5 font-medium">
-                                                <Calendar className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                                <span>{partido.fecha}</span>
-                                            </div>
-                                            <div className="flex items-center gap-1.5 font-bold text-gray-800">
-                                                <Clock className="w-4 h-4 text-green-600 flex-shrink-0" />
-                                                <span>{partido.hora}</span>
-                                            </div>
-                                            <span className={`px-2.5 py-0.5 sm:py-1 rounded-full text-[10px] sm:text-xs font-semibold ${
-                                                partido.cancha === 'Stadium Vinto'
-                                                    ? 'bg-amber-100 text-amber-805 border border-amber-200'
-                                                    : 'bg-teal-100 text-teal-800 border border-teal-200'
-                                            }`}>
-                                                {partido.cancha}
-                                            </span>
-                                        </div>
+                            {loadingTeamFixture ? (
+                                <div className="bg-white border border-gray-200 rounded-2xl p-8 text-center shadow-sm">
+                                    <div className="w-10 h-10 border-4 border-green-700 border-t-transparent rounded-full animate-spin mx-auto mb-3"></div>
+                                    <p className="text-gray-600 font-semibold">Cargando fixture del equipo...</p>
+                                </div>
+                            ) : teamFixtureError ? (
+                                <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-red-700 flex items-start gap-3">
+                                    <AlertCircle className="w-6 h-6 flex-shrink-0 mt-0.5" />
+                                    <div>
+                                        <p className="font-bold mb-1">No se pudo cargar el fixture.</p>
+                                        <p className="text-sm">{teamFixtureError}</p>
                                     </div>
-                                ))}
-                            </div>
+                                </div>
+                            ) : teamFixture.length === 0 ? (
+                                <div className="bg-green-50 border border-green-200 rounded-2xl p-8 text-center">
+                                    <Calendar className="w-10 h-10 text-green-700 mx-auto mb-3" />
+                                    <p className="text-gray-700 font-semibold mb-2">Aún no existe fixture cargado para este equipo. La información será actualizada por la Liga.</p>
+                                    <p className="text-xs text-gray-500 max-w-2xl mx-auto">{PANEL_FIXTURE_RLS_HINT}</p>
+                                </div>
+                            ) : (
+                                <div className="grid gap-4">
+                                    {teamFixture.map((partido) => {
+                                        const statusLabel = getPanelFixtureStatusLabel(partido.estadoVisible);
+                                        const statusClass = getPanelFixtureStatusClass(partido.estadoVisible);
+                                        const isLatestPublished = partido.id === latestPublishedFixtureId;
+                                        const hasConfirmedCalendar = partido.hasCalendarDate;
+
+                                        return (
+                                            <article
+                                                key={partido.id}
+                                                className={`rounded-2xl border p-4 sm:p-5 shadow-sm transition-all ${
+                                                    isLatestPublished
+                                                        ? 'bg-emerald-50 border-emerald-300 ring-2 ring-emerald-100'
+                                                        : 'bg-white border-gray-200 hover:shadow-md'
+                                                }`}
+                                            >
+                                                <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
+                                                    <div className="space-y-3 flex-1">
+                                                        <div className="flex flex-wrap items-center gap-2">
+                                                            <span className="bg-green-800 text-white px-3 py-1 rounded-full text-xs font-black uppercase tracking-wide">{partido.jornadaNombre}</span>
+                                                            {isLatestPublished && (
+                                                                <span className="bg-emerald-100 text-emerald-800 border border-emerald-200 px-3 py-1 rounded-full text-xs font-bold">Última fecha publicada</span>
+                                                            )}
+                                                            {!hasConfirmedCalendar && (
+                                                                <span className="bg-amber-100 text-amber-800 border border-amber-200 px-3 py-1 rounded-full text-xs font-bold">Pendiente de fecha calendario</span>
+                                                            )}
+                                                            <span className="bg-gray-100 text-gray-700 border border-gray-200 px-3 py-1 rounded-full text-xs font-bold">{partido.categoria}</span>
+                                                        </div>
+
+                                                        <div className="grid sm:grid-cols-2 gap-3 text-sm">
+                                                            <div className="flex items-center gap-2 text-gray-700">
+                                                                <Calendar className="w-4 h-4 text-green-700 flex-shrink-0" />
+                                                                <span className="font-semibold">
+                                                                    {hasConfirmedCalendar ? formatFixtureDate(partido.fechaProgramada) : 'Pendiente de confirmación calendario'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-gray-700">
+                                                                <Clock className="w-4 h-4 text-green-700 flex-shrink-0" />
+                                                                <span className="font-bold">{partido.displayTime}</span>
+                                                            </div>
+                                                            <div className="flex items-center gap-2 text-gray-700 sm:col-span-2">
+                                                                <MapPin className="w-4 h-4 text-green-700 flex-shrink-0" />
+                                                                <span>Cancha: <strong>{partido.displayCourt}</strong></span>
+                                                            </div>
+                                                            {!hasConfirmedCalendar && partido.diaBase && (
+                                                                <div className="text-gray-500 sm:col-span-2 text-xs font-semibold uppercase tracking-wide">
+                                                                    Día base: {partido.diaBase}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="bg-gray-50 rounded-xl p-4 border border-gray-100 lg:w-80 space-y-3">
+                                                        <div>
+                                                            <p className="text-[11px] font-black uppercase tracking-wide text-gray-400">Mi equipo</p>
+                                                            <p className="font-extrabold text-gray-900">{partido.miEquipo}</p>
+                                                        </div>
+                                                        <div>
+                                                            <p className="text-[11px] font-black uppercase tracking-wide text-gray-400">Rival</p>
+                                                            <p className="font-extrabold text-gray-900">{partido.rival}</p>
+                                                        </div>
+                                                        <div className="flex flex-wrap gap-2 pt-1">
+                                                            <span className={`px-3 py-1 rounded-full text-xs font-black border ${
+                                                                partido.condicion === 'Local'
+                                                                    ? 'bg-emerald-100 text-emerald-800 border-emerald-200'
+                                                                    : 'bg-indigo-100 text-indigo-800 border-indigo-200'
+                                                            }`}>
+                                                                {partido.condicion}
+                                                            </span>
+                                                            <span className={`px-3 py-1 rounded-full text-xs font-black border ${statusClass}`}>
+                                                                {statusLabel}
+                                                            </span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </article>
+                                        );
+                                    })}
+                                </div>
+                            )}
                         </div>
                     )}
                 </div>
             </div>
-
             {/* MODAL DE EDICIÓN DE JUGADOR */}
             {editingPlayer && (
                 <div className="fixed inset-0 z-50 overflow-y-auto bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -2221,55 +2451,56 @@ const Contacto = () => (
         <div className="grid md:grid-cols-2 gap-12">
             <div>
                 <div className="bg-white p-8 rounded-xl shadow-lg mb-8">
-                    <h3 className="text-2xl font-bold text-gray-900 mb-6">Información de Contacto</h3>
+                    <h3 className="text-2xl font-bold text-gray-900 mb-6">Informaci&oacute;n de Contacto</h3>
                     <div className="space-y-6">
                         <div className="flex items-start">
                             <MapPin className="w-6 h-6 text-green-600 mt-1 mr-4" />
                             <div>
-                                <h4 className="font-bold text-gray-800">Dirección</h4>
-                                <p className="text-gray-600">Av. Principal s/n, Plaza Principal de Vinto<br />Cochabamba, Bolivia</p>
+                                <h4 className="font-bold text-gray-800">Direcci&oacute;n</h4>
+                                <p className="text-gray-600">Estadium Hipolito Lazarte, Vinto</p>
                             </div>
                         </div>
                         <div className="flex items-start">
                             <Phone className="w-6 h-6 text-green-600 mt-1 mr-4" />
                             <div>
-                                <h4 className="font-bold text-gray-800">Teléfono</h4>
-                                <p className="text-gray-600">+591 4 444-1234</p>
-                                <p className="text-gray-600">+591 777-88899 (WhatsApp)</p>
+                                <h4 className="font-bold text-gray-800">Tel&eacute;fono</h4>
+                                <p className="text-gray-600">77968160</p>
                             </div>
                         </div>
                         <div className="flex items-start">
                             <Mail className="w-6 h-6 text-green-600 mt-1 mr-4" />
                             <div>
                                 <h4 className="font-bold text-gray-800">Email</h4>
-                                <p className="text-gray-600">contacto@ligavinto.com</p>
+                                <p className="text-gray-600">ligadefutbolvinto@gmail.com</p>
                             </div>
                         </div>
                         <div className="flex items-start">
                             <Clock className="w-6 h-6 text-green-600 mt-1 mr-4" />
                             <div>
-                                <h4 className="font-bold text-gray-800">Horario de Atención</h4>
-                                <p className="text-gray-600">Lunes a Viernes: 08:00 - 16:00</p>
-                                <p className="text-gray-600">Sábados: 09:00 - 12:00</p>
+                                <h4 className="font-bold text-gray-800">Horario de Atenci&oacute;n</h4>
+                                <p className="text-gray-600">todos los martes de 19:30 a 22:00</p>
                             </div>
                         </div>
                     </div>
                 </div>
             </div>
 
-            <div className="h-full min-h-[400px] bg-gray-200 rounded-xl overflow-hidden shadow-lg relative">
-                <div className="absolute inset-0 flex items-center justify-center bg-gray-300">
-                    <div className="text-center p-6">
-                        <MapPin className="w-16 h-16 text-gray-500 mx-auto mb-4" />
-                        <p className="text-xl font-bold text-gray-600">Mapa de Ubicación</p>
-                        <p className="text-gray-505">(Integración con Google Maps)</p>
-                    </div>
-                </div>
+            <div className="h-full min-h-[400px] bg-white rounded-xl overflow-hidden shadow-lg border border-gray-100">
+                <iframe
+                    title="Ubicaci&oacute;n de la Liga de F&uacute;tbol de Vinto"
+                    src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d188.07155178441823!2d-66.31703938798906!3d-17.398007600541284!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e1!3m2!1ses!2sbo!4v1784062097044!5m2!1ses!2sbo"
+                    width="600"
+                    height="450"
+                    style={{ border: 0 }}
+                    allowFullScreen
+                    loading="lazy"
+                    referrerPolicy="strict-origin-when-cross-origin"
+                    className="w-full h-full min-h-[400px]"
+                />
             </div>
         </div>
     </div>
 );
-
 const Footer = () => (
     <footer className="bg-gray-900 text-white py-12 font-sans">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
