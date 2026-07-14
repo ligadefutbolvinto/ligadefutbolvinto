@@ -2458,6 +2458,7 @@ const Contacto = () => (
                             <div>
                                 <h4 className="font-bold text-gray-800">Direcci&oacute;n</h4>
                                 <p className="text-gray-600">Estadium Hipolito Lazarte, Vinto</p>
+                                <p className="text-gray-600">Cochabamba - Bolivia</p>
                             </div>
                         </div>
                         <div className="flex items-start">
@@ -2478,7 +2479,7 @@ const Contacto = () => (
                             <Clock className="w-6 h-6 text-green-600 mt-1 mr-4" />
                             <div>
                                 <h4 className="font-bold text-gray-800">Horario de Atenci&oacute;n</h4>
-                                <p className="text-gray-600">todos los martes de 19:30 a 22:00</p>
+                                <p className="text-gray-600">Martes de 19:30 a 22:00</p>
                             </div>
                         </div>
                     </div>
@@ -2488,7 +2489,7 @@ const Contacto = () => (
             <div className="h-full min-h-[400px] bg-white rounded-xl overflow-hidden shadow-lg border border-gray-100">
                 <iframe
                     title="Ubicaci&oacute;n de la Liga de F&uacute;tbol de Vinto"
-                    src="https://www.google.com/maps/embed?pb=!1m14!1m12!1m3!1d188.07155178441823!2d-66.31703938798906!3d-17.398007600541284!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!5e1!3m2!1ses!2sbo!4v1784062097044!5m2!1ses!2sbo"
+                    src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d1265.1926858206982!2d-66.31810045816138!3d-17.397554335788037!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x93e30befa9359adb%3A0xf9fbaa1bf241f98f!2sHip%C3%B3lito%20Lazarte!5e1!3m2!1ses!2sbo!4v1784063869711!5m2!1ses!2sbo"
                     width="600"
                     height="450"
                     style={{ border: 0 }}
